@@ -7,7 +7,7 @@ Example: lede2rpi.sh Pi3 snapshot
          lede2rpi.sh Pi2 17.01.0
          lede2rpi.sh Pi  17.01.1
 
-Generates files:
+Generate files:
 - boot.tar.xz
 - root.tar.xz
 - partition_setup.sh
@@ -15,7 +15,9 @@ Generates files:
 - os.json
 - LEDE.png
 
-in directory /tmp/lede2R[PI_MODEL]_[RELEASE]
-lede2RPi3_snapshot for Pi3 snapshot
+in directory /tmp/lede2R[PI_MODEL]_[RELEASE]/noobs_lede
+for example: lede2RPi3_snapshot/noobs_lede for Pi3 snapshot
 
-yet not tested with RPi, i have no free SD card :-)
+Directory noobs_lede can be copied to SD card into /os folder.
+
+Tested with RPi 3

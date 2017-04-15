@@ -200,4 +200,4 @@ EOF
 #####################################################################
 
 echo "Done. LEDE files for NOOBS stored in ${DESTINATION_DIR} directory"
-
+echo "Now you can copy directory noobs_lede to NOOBS SD card into /os folder"
