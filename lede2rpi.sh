@@ -157,14 +157,14 @@ cat <<EOF > partitions.json
 {
   "partitions": [
     {
-      "label": "boot",
+      "label": "LEDE_boot",
       "filesystem_type": "FAT",
       "partition_size_nominal": $LEDE_BOOT_PART_SIZE,
       "want_maximised": false,
       "uncompressed_tarball_size": $BOOT_TAR_SIZE
     },
     {
-      "label": "root",
+      "label": "LEDE_root",
       "filesystem_type": "ext4",
       "partition_size_nominal": $LEDE_ROOT_PART_SIZE,
       "want_maximised": false,
