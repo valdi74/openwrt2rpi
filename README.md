@@ -21,3 +21,13 @@ for example: lede2RPi3_snapshot/noobs_lede for Pi3 snapshot
 Directory noobs_lede can be copied to SD card into /os folder.
 
 Tested with RPi 3
+
+## Requirements:
+```
+sudo apt install kpartx
+```
+
+## License
+
+This project is licensed under the GPLv3 License - see the [LICENSE](LICENSE) file for details
+
