@@ -1,26 +1,31 @@
 # lede2rpi
-converting lede img to RPi NOOBS format
+downloading and converting LEDE img to Raspberry Pi NOOBS/PINN installer format
 
   Usage: lede2rpi.sh Pi|Pi2|Pi3 LEDE_RELEASE|snapshot
 
-Example: lede2rpi.sh Pi3 snapshot
-         lede2rpi.sh Pi2 17.01.0
-         lede2rpi.sh Pi  17.01.1
+Examples:
 
-Generate files:
-- boot.tar.xz
-- root.tar.xz
+lede2rpi.sh Pi3 snapshot
+
+lede2rpi.sh Pi2 17.01.0
+
+lede2rpi.sh Pi  17.01.1
+
+Script generates files:
+- LEDE_boot.tar.xz
+- LEDE_root.tar.xz
 - partition_setup.sh
 - partitions.json
 - os.json
 - LEDE.png
 
-in directory /tmp/lede2R[PI_MODEL]_[RELEASE]/noobs_lede
-for example: lede2RPi3_snapshot/noobs_lede for Pi3 snapshot
+in directory /tmp/lede2R[PI_MODEL]_[RELEASE]/LEDE
 
-Directory noobs_lede can be copied to SD card into /os folder.
+for example: lede2RPi3_snapshot/LEDE for Pi3 snapshot
 
-Tested with RPi 3
+Directory LEDE can be copied to SD card into /os folder for NOOBS/PINN installer.
+
+Tested with Raspberry Pi 3 and NOOBS 2.4.0
 
 ## Requirements:
 ```

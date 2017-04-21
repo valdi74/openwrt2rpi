@@ -27,9 +27,11 @@ LEDE_IMAGE_MASK="lede.*${LEDE_SUBTARGET}.*\.img\\${LEDE_IMAGE_COMPR_EXT}"
 BLOCK_DEVICE_BOOT="/dev/dm-0"
 BLOCK_DEVICE_ROOT="/dev/dm-1"
 WORK_DIR="${TMP_DIR}/lede2R"`echo ${RASPBERRY_MODEL} | tr -d '[:space:]'`"_${LEDE_RELEASE}"
-DESTINATION_DIR="${WORK_DIR}/noobs_lede"
-NOOBS_BOOT_IMAGE="${DESTINATION_DIR}/boot.tar"
-NOOBS_ROOT_IMAGE="${DESTINATION_DIR}/root.tar"
+DESTINATION_DIR="${WORK_DIR}/LEDE"
+NOOBS_BOOT_LABEL="LEDE_boot"
+NOOBS_ROOT_LABEL="LEDE_root"
+NOOBS_BOOT_IMAGE="${DESTINATION_DIR}/${NOOBS_BOOT_LABEL}.tar"
+NOOBS_ROOT_IMAGE="${DESTINATION_DIR}/${NOOBS_ROOT_LABEL}.tar"
 LEDE_HTML="lede.html"
 LEDE_KERNEL_IMAGE="kernel*.img"
 LEDE_VERSION_FILE="usr/lib/os-release"
@@ -157,14 +159,14 @@ cat <<EOF > partitions.json
 {
   "partitions": [
     {
-      "label": "LEDE_boot",
+      "label": "${NOOBS_BOOT_LABEL}",
       "filesystem_type": "FAT",
       "partition_size_nominal": $LEDE_BOOT_PART_SIZE,
       "want_maximised": false,
       "uncompressed_tarball_size": $BOOT_TAR_SIZE
     },
     {
-      "label": "LEDE_root",
+      "label": "${NOOBS_ROOT_LABEL}",
       "filesystem_type": "ext4",
       "partition_size_nominal": $LEDE_ROOT_PART_SIZE,
       "want_maximised": false,
