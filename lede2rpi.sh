@@ -78,7 +78,7 @@ parted "${WORK_DIR}/${LEDE_IMAGE_DECOMPR}" print
 print_var_name_value LEDE_BOOT_PART_SIZE
 print_var_name_value LEDE_ROOT_PART_SIZE
 
-sudo kpartx -av "${WORK_DIR}/${LEDE_IMAGE_DECOMPR}"
+sudo kpartx -sav "${WORK_DIR}/${LEDE_IMAGE_DECOMPR}"
 sleep 1
 
 BOOT_UUID=`udisksctl mount --block-device "${BLOCK_DEVICE_BOOT}" | grep -o "${MEDIA_USER_DIR}/.*"`
