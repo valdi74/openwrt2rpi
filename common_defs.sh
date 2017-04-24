@@ -65,3 +65,19 @@ get_param_from_file() {
     fi
   done < $1
 }
+
+pause() {
+  local MESSAGE
+  local KEY_PRESSED
+
+  if [ -n "$1" ]; then
+    MESSAGE=$1
+  else
+    MESSAGE="PRESS ENTER "
+  fi
+
+  echo
+  read -r -p "$MESSAGE" KEY_PRESSED
+  echo
+}
+
