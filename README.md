@@ -3,7 +3,7 @@ Linux shell script for downloading and converting LEDE img to Raspberry Pi NOOBS
 
 ## Usage:
 ```
-$ lede2rpi.sh -m RPI_MODEL -r LEDE_RELEASE [OPTIONS]
+$ lede2rpi.sh -m RASPBERRY_MODEL -r LEDE_RELEASE [OPTIONS]
 
 OPTIONS:
 
@@ -84,12 +84,16 @@ for example: lede2RPi3_snapshot/LEDE for Pi3 snapshot
 
 Directory LEDE can be copied to SD card into /os folder for NOOBS/PINN installer.
 
-Tested with Raspberry Pi 3 and NOOBS 2.4.0
+Optionally script downloads selected modules to root partition and creates initial script.
 
-## Requirements:
+Tested on Ubuntu 16.04 with Raspberry Pi 3 and NOOBS 2.4.0 / PINN 2.3.1a BETA
+
+## Requirements
 ```
 sudo apt install kpartx
 ```
+## To do
+- script to upgrade existing LEDE instalation on NOOBS/PINN SD card.
 
 ## License
 

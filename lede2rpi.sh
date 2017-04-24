@@ -12,6 +12,7 @@ BOOT_PART_LABEL="LEDE_boot"
 ROOT_PART_LABEL="LEDE_root"
 MODULES_DESTINATION="/root/ipk/"
 PAUSE_AFTER_MOUNT=N
+RC_LOCAL="/etc/rc.local"
 
 DEBUG=N
 #test
@@ -45,6 +46,8 @@ while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:p" opt; do
     e) ROOT_PART_LABEL="$OPTARG"
     ;;
     o) LEDE_OS_NAME="$OPTARG"
+    ;;
+    r) RUN_INITIAL_SCRIPT_ONCE=T
     ;;
     p) PAUSE_AFTER_MOUNT=T
     ;;
@@ -175,6 +178,14 @@ if [ ! -z "$MODULES_LIST" ]; then
 fi
 
 [ ! -z "${INCLUDE_INITIAL_FILE}" ] && cat "${INCLUDE_INITIAL_FILE}" >> "${LEDE_INIT_TMP_FILE}"
+
+if [ ! -z "${RUN_INITIAL_SCRIPT_ONCE}" ]; then
+  echo 'sed -i "/#lede2rpi_delete/d" '${RC_LOCAL} >> "${LEDE_INIT_TMP_FILE}"
+
+  sed -i "/exit 0/i \
+${INCLUDE_INITIAL_FILE} & #lede2rpi_delete\
+" "${MEDIA_USER_DIR}/${ROOT_UUID}${RC_LOCAL}"
+fi
 
 if [ ! -z "$INITIAL_SCRIPT_PATH" ]; then
   echo "Creating initial script ${INITIAL_SCRIPT_PATH} on LEDE root partition"
