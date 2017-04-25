@@ -3,7 +3,7 @@
 . ${0%/*}/common_defs.sh
 
 #defaults
-PROGRAM_VERSION="1.01"
+PROGRAM_VERSION="1.02"
 WORKING_DIR="${TMP_DIR}"
 LEDE_BOOT_PART_SIZE=25
 LEDE_ROOT_PART_SIZE=300
@@ -13,15 +13,17 @@ ROOT_PART_LABEL="LEDE_root"
 MODULES_DESTINATION="/root/ipk/"
 PAUSE_AFTER_MOUNT=N
 RC_LOCAL="/etc/rc.local"
+WGET_OPTS="q"
+KPARTX_OPTS=""
+STDOUT="/dev/null"
 
-DEBUG=N
-#test
-#./lede2rpi.sh -m Pi3 -r 17.01.1 -p -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot -e LEDE_root -o LEDE
+#test run (no img file downloading/decompress):
+#DEBUG=T ./lede2rpi.sh -m Pi3 -r 17.01.1 -p -q -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot1 -e LEDE_root1 -o LEDE1
 
 echo "LEDE2RPi version ${PROGRAM_VERSION}"
 
 BAD_PARAMS=N
-while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:p" opt; do
+while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:cqvph" opt; do
   case $opt in
     m) RASPBERRY_MODEL="$OPTARG"
     ;;
@@ -47,20 +49,99 @@ while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:p" opt; do
     ;;
     o) LEDE_OS_NAME="$OPTARG"
     ;;
-    r) RUN_INITIAL_SCRIPT_ONCE=T
+    c) RUN_INITIAL_SCRIPT_ONCE=T
+    ;;
+    q) QUIET=T
+    ;;
+    v) VERBOSE=T
     ;;
     p) PAUSE_AFTER_MOUNT=T
+    ;;
+    h) HELP=T
     ;;
     \?) echo "Invalid option -$OPTARG" >&2; BAD_PARAMS=T
     ;;
   esac
 done
 
+if [ "$HELP" == "T" ]; then
+  echo "
+Usage:
+
+lede2rpi.sh -m RASPBERRY_MODEL -r LEDE_RELEASE [OPTIONS]
+
+OPTIONS:
+
+-m RASPBERRY_MODEL
+   RASPBERRY_MODEL=Pi|Pi2|Pi3, mandatory parameter
+
+-r LEDE_RELEASE
+   LEDE_RELEASE=snapshot|17.01.0|17.01.0|future_release_name, mandatory parameter
+
+-d WORKING_DIR
+   WORKING_DIR=<working_directory_path>, optional parameter, default=/tmp/
+   Directory to store temporary and final files.
+
+-p
+   optional parameter
+   Pause after boot and root partitions mount. You can add/modify files on both partitions in /media/$USER/[UUID] directories.
+
+-a MODULES_LIST
+   MODULES_LIST='module1 module2 ...', optional parameter
+   List of modules to download and copy to root image into MODULES_DESTINATION directory
+
+-b MODULES_DESTINATION
+   MODULES_DESTINATION=<ipk_directory_path>, optional parameter, default=/root/ipk/
+   Directory on LEDE root partition to copy downloaded modules from MODULES_LIST
+
+-s INITIAL_SCRIPT_PATH
+   INITIAL_SCRIPT_PATH=<initial_script_path>, optional parameter, default=none
+   Path to store initial configuration script on LEDE root partition. Example: /root/init_config.sh
+
+-i INCLUDE_INITIAL_FILE
+   MODULES_LIST=<include_initial_script_path>, optional parameter
+   Path to local script, to be included in initial configuration script INITIAL_SCRIPT_PATH.
+
+-c
+   optional parameter, default=no autorun initial script
+   Run initial script INITIAL_SCRIPT_PATH once. Path to initial script will be added do /etc/rc.local and removed after first run.
+
+-k LEDE_BOOT_PART_SIZE
+   LEDE_BOOT_PART_SIZE=<boot_partition_size_in_mb>, optional parameter, default=25
+   LEDE boot partition size in MB.
+
+-l LEDE_ROOT_PART_SIZE
+   LEDE_ROOT_PART_SIZE=<root_partition_size_in_mb>, optional parameter, default=300
+   LEDE root partition size in MB.
+
+-n BOOT_PART_LABEL
+   BOOT_PART_LABEL=<boot_partition_label>, optional parameter, default=LEDE_boot
+   LEDE boot partition label.
+
+-e ROOT_PART_LABEL
+   ROOT_PART_LABEL=<root_partition_label>, optional parameter, default=LEDE_root
+   LEDE root partition label.
+
+-o LEDE_OS_NAME
+   LEDE_OS_NAME=<lede_os_name>, optional parameter, default=LEDE
+   LEDE os name in os.json
+
+-q
+   optional parameter, default=no quiet
+   Quiet mode.
+
+-v
+   optional parameter, default=no verbose
+   Verbose mode.
+"
+  exit
+fi
+
 [ -z "$RASPBERRY_MODEL" ] && echo "Model not specified" && BAD_PARAMS=T
 
 [ -z "$LEDE_RELEASE" ] && echo "LEDE release not specified" && BAD_PARAMS=T
 
-[ "$BAD_PARAMS" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r 17.01.1"
+[ "$BAD_PARAMS" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p] [-a MODULES_LIST] [-b MODULES_DESTINATION] [-s INITIAL_SCRIPT_PATH] [-i INCLUDE_INITIAL_FILE] [-q] [-k LEDE_BOOT_PART_SIZE] [-l LEDE_ROOT_PART_SIZE] [-n BOOT_PART_LABEL] [-e ROOT_PART_LABEL] [-o LEDE_OS_NAME]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
 
 case "${RASPBERRY_MODEL}" in
   "Pi")  LEDE_SUBTARGET="bcm2708"; RASPBERRY_MODELS="\"Pi Model\", \"Pi Compute Module\", \"Pi Zero\""; RASPBERRY_HEX_REVISIONS="2,3,4,5,6,7,8,9,d,e,f,10,11,12,13,14,19,0092" ;;
@@ -89,32 +170,38 @@ LEDE_REPO_COFIG="/etc/opkg/distfeeds.conf"
 
 [ "$DEBUG" == "T" ] && print_var_name_value DEBUG red bold
 
+if [ "$VERBOSE" == "T" ]; then
+  WGET_OPTS=""
+  KPARTX_OPTS="v"
+  STDOUT="/dev/stdout"
+  QUIET=N
+  print_var_name_value_verbose DESTINATION_DIR
+  print_var_name_value_verbose LEDE_IMAGE_MASK
+  print_var_name_value_verbose RASPBERRY_MODEL
+  print_var_name_value_verbose RASPBERRY_MODELS
+  print_var_name_value_verbose LEDE_SUBTARGET
+  print_var_name_value_verbose LEDE_RELEASE
+  print_var_name_value_verbose LEDE_DOWNLOAD
+fi
+
 cd "${WORKING_DIR}"
 mkdir -p "${DESTINATION_DIR}"
 rm "${DESTINATION_DIR}"/* 2>/dev/null
 
-print_var_name_value DESTINATION_DIR
-print_var_name_value LEDE_IMAGE_MASK
-print_var_name_value RASPBERRY_MODEL
-print_var_name_value RASPBERRY_MODELS
-print_var_name_value LEDE_SUBTARGET
-print_var_name_value LEDE_RELEASE
-print_var_name_value LEDE_DOWNLOAD
-
 # debug
-[ "$DEBUG" != "T" ] && wget -O "${WORKING_SUB_DIR}/${LEDE_HTML}" "${LEDE_DOWNLOAD}"
+[ "$DEBUG" != "T" ] && wget -${WGET_OPTS}O "${WORKING_SUB_DIR}/${LEDE_HTML}" "${LEDE_DOWNLOAD}"
 
 LEDE_IMAGE_COMPR=`grep -o '"'${LEDE_IMAGE_MASK}'"' "${WORKING_SUB_DIR}/${LEDE_HTML}" | grep -o "${LEDE_IMAGE_MASK}"`
 
 [ -z "${LEDE_IMAGE_COMPR}" ] && error_exit "Can't get LEDE image name"
-print_var_name_value LEDE_IMAGE_COMPR
+print_var_name_value_verbose LEDE_IMAGE_COMPR
 
 LEDE_RELEASE_DATE=`grep -o '<td class="d">.*</td>' "${WORKING_SUB_DIR}/${LEDE_HTML}" | head -n1`
 LEDE_RELEASE_DATE=`date -d"${LEDE_RELEASE_DATE:14: -5}" +%Y-%m-%d`
-print_var_name_value LEDE_RELEASE_DATE
+print_var_name_value_verbose LEDE_RELEASE_DATE
 
 # debug
-[ "$DEBUG" != "T" ] && wget -O "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}" "${LEDE_DOWNLOAD}/${LEDE_IMAGE_COMPR}"
+[ "$DEBUG" != "T" ] && wget -${WGET_OPTS}O "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}" "${LEDE_DOWNLOAD}/${LEDE_IMAGE_COMPR}"
 
 # debug
 [ "$DEBUG" != "T" ] && gzip -dv "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}"
@@ -122,39 +209,41 @@ print_var_name_value LEDE_RELEASE_DATE
 LEDE_IMAGE_DECOMPR=`basename "${LEDE_IMAGE_COMPR}" "${LEDE_IMAGE_COMPR_EXT}"`
 
 [ -z "${LEDE_IMAGE_DECOMPR}" ] && error_exit "Can't unpack LEDE image"
-print_var_name_value LEDE_IMAGE_DECOMPR
 
-parted "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" print
-print_var_name_value LEDE_BOOT_PART_SIZE
-print_var_name_value LEDE_ROOT_PART_SIZE
+if [ "$VERBOSE" == "T" ]; then
+  print_var_name_value_verbose LEDE_IMAGE_DECOMPR
+  parted "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" print
+  print_var_name_value_verbose LEDE_BOOT_PART_SIZE
+  print_var_name_value_verbose LEDE_ROOT_PART_SIZE
+fi
 
-sudo kpartx -sav "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}"
+print_info "Create device maps from ${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}\n"
+sudo kpartx -sa${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}"
 sleep 1
 
 BOOT_UUID=`udisksctl mount --block-device "${BLOCK_DEVICE_BOOT}" | grep -o "${MEDIA_USER_DIR}/.*"`
 BOOT_UUID=`basename "${BOOT_UUID}" .`
 [ -z "${BOOT_UUID}" ] && error_exit "Can't evaluate BOOT_UUID name"
-print_var_name_value BOOT_UUID
+print_var_name_value_verbose BOOT_UUID
 
 ROOT_UUID=`udisksctl mount --block-device "${BLOCK_DEVICE_ROOT}" | grep -o "${MEDIA_USER_DIR}/.*"`
 ROOT_UUID=`basename "${ROOT_UUID}" .`
 [ -z "${ROOT_UUID}" ] && error_exit "Can't evaluate ROOT_UUID name"
-print_var_name_value ROOT_UUID
+print_var_name_value_verbose ROOT_UUID
 
 cd "${MEDIA_USER_DIR}/${BOOT_UUID}"
 
 LEDE_KERNEL_VER=`grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" ${LEDE_KERNEL_IMAGE} | head -n1`
 LEDE_KERNEL_VER="${LEDE_KERNEL_VER:14}"
 [ -z "${LEDE_KERNEL_VER}" ] && LEDE_KERNEL_VER="${LEDE_KERNEL_VER_DEFAULT}"
-print_var_name_value LEDE_KERNEL_VER
+print_var_name_value_verbose LEDE_KERNEL_VER
 
 cat <<EOF > "${LEDE_INIT_TMP_FILE}"
 #!/bin/sh
-#cd "$MODULES_DESTINATION"
 EOF
 
 if [ ! -z "$MODULES_LIST" ]; then
-  echo "Downloading modules: $MODULES_LIST into $MODULES_DESTINATION directory on LEDE root partition"
+  print_info "Downloading modules: $MODULES_LIST into $MODULES_DESTINATION directory on LEDE root partition\n"
 
   SEPARATOR=""
   MODULES_PATTERN=""
@@ -163,32 +252,39 @@ if [ ! -z "$MODULES_LIST" ]; then
     SEPARATOR="|"
     echo 'opkg install "'${MODULES_DESTINATION}'/'${MODULE}'*.ipk"' >> "${LEDE_INIT_TMP_FILE}"
   done
-  [ "$DEBUG" == "T" ] && print_var_name_value MODULES_PATTERN
+  [ "$DEBUG" == "T" ] && print_var_name_value_verbose MODULES_PATTERN
 
   mkdir -p "${MODULES_DOWNLOAD_DIR}"
   rm "${MODULES_DOWNLOAD_DIR}"/* 2>/dev/null
 
   for REPO_ADDR in $(grep -o 'http://.*' "${MEDIA_USER_DIR}/${ROOT_UUID}${LEDE_REPO_COFIG}"); do
-    for PACKAGE_NAME in $(wget -qO - "${REPO_ADDR}" | grep -oP "${MODULES_PATTERN}"); do
-      echo "Downloading ${REPO_ADDR}/${PACKAGE_NAME}"
-      wget -qP "${MODULES_DOWNLOAD_DIR}" "${REPO_ADDR}/${PACKAGE_NAME}"
+    for PACKAGE_NAME in $(wget -${WGET_OPTS}O - "${REPO_ADDR}" | grep -oP "${MODULES_PATTERN}"); do
+      [ "$VERBOSE" == "T" ] && print_info "Downloading ${REPO_ADDR}/${PACKAGE_NAME}\n"
+      wget -${WGET_OPTS}P "${MODULES_DOWNLOAD_DIR}" "${REPO_ADDR}/${PACKAGE_NAME}"
     done
   done
   sudo cp -R "${MODULES_DOWNLOAD_DIR}/." "${MEDIA_USER_DIR}/${ROOT_UUID}/${MODULES_DESTINATION}"
 fi
 
-[ ! -z "${INCLUDE_INITIAL_FILE}" ] && cat "${INCLUDE_INITIAL_FILE}" >> "${LEDE_INIT_TMP_FILE}"
-
 if [ ! -z "${RUN_INITIAL_SCRIPT_ONCE}" ]; then
+  print_info "Sheduling one run of initial script using LEDE ${RC_LOCAL}\n"
+
   echo 'sed -i "/#lede2rpi_delete/d" '${RC_LOCAL} >> "${LEDE_INIT_TMP_FILE}"
 
-  sed -i "/exit 0/i \
-${INCLUDE_INITIAL_FILE} & #lede2rpi_delete\
+  sudo sed -i "/exit 0/i \
+${INITIAL_SCRIPT_PATH} #lede2rpi_delete\
 " "${MEDIA_USER_DIR}/${ROOT_UUID}${RC_LOCAL}"
 fi
 
+if [ ! -z "${INCLUDE_INITIAL_FILE}" ]; then
+  print_info "Including local initial file ${INCLUDE_INITIAL_FILE}\n"
+
+  cat "${INCLUDE_INITIAL_FILE}" >> "${LEDE_INIT_TMP_FILE}"
+fi
+
 if [ ! -z "$INITIAL_SCRIPT_PATH" ]; then
-  echo "Creating initial script ${INITIAL_SCRIPT_PATH} on LEDE root partition"
+  print_info "Creating initial script ${INITIAL_SCRIPT_PATH} on LEDE root partition\n"
+
   sudo cp "${LEDE_INIT_TMP_FILE}" "${MEDIA_USER_DIR}/${ROOT_UUID}/${INITIAL_SCRIPT_PATH}"
   sudo chmod u+x "${MEDIA_USER_DIR}/${ROOT_UUID}/$INITIAL_SCRIPT_PATH"
 fi
@@ -198,38 +294,43 @@ fi
 tar -cpf "${NOOBS_BOOT_IMAGE}" .
 #ls "${NOOBS_BOOT_IMAGE}" -l --block-size=1MB
 BOOT_TAR_SIZE=`du -m "${NOOBS_BOOT_IMAGE}" | cut -f1`
-print_var_name_value BOOT_TAR_SIZE
-echo -n "xz boot..."
+print_var_name_value_verbose BOOT_TAR_SIZE
+print_info "xz compressing partition boot..."
 xz -9 -e "${NOOBS_BOOT_IMAGE}"
-echo ok
+print_info "done\n"
 
 cd "${MEDIA_USER_DIR}/${ROOT_UUID}"
 
 LEDE_VERSION_ID=$(get_param_from_file ${LEDE_VERSION_FILE} VERSION_ID)
 LEDE_BUILD_ID=$(get_param_from_file ${LEDE_VERSION_FILE} BUILD_ID)
 LEDE_VERSION="${LEDE_VERSION_ID} ${LEDE_BUILD_ID}"
-print_var_name_value LEDE_VERSION
+print_var_name_value_verbose LEDE_VERSION
 
 sudo tar -cpf "${NOOBS_ROOT_IMAGE}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/*
 sudo chown ${USER}:${USER} "${NOOBS_ROOT_IMAGE}"
 #ls "${NOOBS_ROOT_IMAGE}" -l --block-size=1MB
 ROOT_TAR_SIZE=`du -m "${NOOBS_ROOT_IMAGE}" | cut -f1`
-print_var_name_value ROOT_TAR_SIZE
-echo -n "xz root..."
+print_var_name_value_verbose ROOT_TAR_SIZE
+print_info "xz compressing partition root..."
 xz -9 -e "${NOOBS_ROOT_IMAGE}"
-echo ok
+print_info "done\n"
 
 cd "${DESTINATION_DIR}"
 
-udisksctl unmount --block-device "${BLOCK_DEVICE_ROOT}"
-sleep 1
-udisksctl unmount --block-device "${BLOCK_DEVICE_BOOT}"
+print_info "Unmounting ${BLOCK_DEVICE_ROOT} -> ${MEDIA_USER_DIR}/${ROOT_UUID}\n"
+udisksctl unmount --block-device "${BLOCK_DEVICE_ROOT}" > "${STDOUT}"
 sleep 1
 
-sudo kpartx -dv "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}"
+print_info "Unmounting ${BLOCK_DEVICE_BOOT} -> ${MEDIA_USER_DIR}/${BOOT_UUID}\n"
+udisksctl unmount --block-device "${BLOCK_DEVICE_BOOT}" > "${STDOUT}"
+sleep 1
 
-#####################################################################
-cat <<EOF > partition_setup.sh
+print_info "Delete device maps from ${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}\n"
+sudo kpartx -d${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" > "${STDOUT}"
+
+##################################################################### partition_setup.sh
+print_info "Creating partition_setup.sh\n"
+cat <<'EOF' > partition_setup.sh
 #!/bin/sh
 
 set -ex
@@ -252,6 +353,7 @@ umount /tmp/1
 umount /tmp/2
 EOF
 ##################################################################### partitions.json
+print_info "Creating partitions.json\n"
 cat <<EOF > partitions.json
 {
   "partitions": [
@@ -274,6 +376,7 @@ cat <<EOF > partitions.json
 }
 EOF
 ##################################################################### os.json
+print_info "Creating os.json\n"
 cat <<EOF > os.json
 {
   "name": "${LEDE_OS_NAME}",
@@ -290,7 +393,8 @@ cat <<EOF > os.json
 }
 EOF
 ##################################################################### LOGO: xxd -ps -c72 lede_40x40_source.png
-xxd -r -ps <<EOF >${LEDE_OS_NAME}.png
+print_info "Creating ${LEDE_OS_NAME}.png\n"
+xxd -r -ps <<'EOF' >${LEDE_OS_NAME}.png
 89504e470d0a1a0a0000000d4948445200000028000000280802000000039c2f3a0000028f4944415458c3ed58d1b59b300c75de610131022b9811c8085e01464846801160843042
 18018f108fe03b02ef43c131c6a4f49df6d1d3565f80a57b2559929d9ca6691247c887384822c4c698038801f47d0fe05f4af57fe2bf9cf81bea992589f5317c2788e8bd67ace0be
 07fa6b135648d64a80e187ebf50aa06d5b1fabaa2a1f4e4a59d7b531a6aa2aa796655951144551b05ad3343c94d8a4288acbe522a6a58ce3286561adb5d63290b5d657e08f449465
@@ -304,6 +408,6 @@ e0b3135868bb0bd0736d0fb153657dcfca21acbc7a7a208097feccbdbbb89c9b7386b0e486e0d452
 EOF
 #####################################################################
 
-echo "Done. LEDE files for NOOBS stored in ${DESTINATION_DIR} directory"
-echo "Now you can copy directory noobs_lede to NOOBS SD card into /os folder"
+print_info "\nDone. LEDE files for NOOBS are stored in ${DESTINATION_DIR} directory
+Now you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n"
 

@@ -52,6 +52,14 @@ print_var_name_value() {
   fi
 }
 
+print_var_name_value_verbose() {
+  [ "${VERBOSE}" == "T" ] && print_var_name_value "$1" "$2" "$3"
+}
+
+print_info() {
+  [ ! "${QUIET}" == "T" ] && echo -ne "$1"
+}
+
 get_param_from_file() {
   shopt -s extglob
   while IFS='= ' read lhs rhs
