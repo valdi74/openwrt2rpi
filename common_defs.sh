@@ -60,18 +60,16 @@ print_info() {
   [ ! "${QUIET}" == "T" ] && echo -ne "$1"
 }
 
-get_param_from_file() {
-  shopt -s extglob
-  while IFS='= ' read lhs rhs
-  do
-    if [[ ! $lhs =~ ^\ *# && -n $lhs && "$lhs" == "$2" ]]; then
-        rhs="${rhs%%\#*}"    # Del in line right comments
-        rhs="${rhs%%*( )}"   # Del trailing spaces
-        rhs="${rhs%\"*}"     # Del opening string quotes
-        rhs="${rhs#\"*}"     # Del closing string quotes
-        echo "$rhs"
-    fi
-  done < $1
+ask() {
+  local KEY_PRESSED
+
+  read -n1 -r -p "$1 (Enter/y=yes) " KEY_PRESSED
+  if [ -z "$KEY_PRESSED" ] || [ "$KEY_PRESSED" = "y" ]; then
+    echo "Y"
+  else
+    echo "N"
+  fi
+  echo >&2
 }
 
 pause() {
@@ -88,4 +86,26 @@ pause() {
   read -r -p "$MESSAGE" KEY_PRESSED
   echo
 }
+
+input_line() {
+  local BUFFER
+
+  read -r -p "$1" BUFFER
+  echo $BUFFER
+}
+
+get_param_from_file() {
+  shopt -s extglob
+  while IFS='= ' read lhs rhs
+  do
+    if [[ ! $lhs =~ ^\ *# && -n $lhs && "$lhs" == "$2" ]]; then
+        rhs="${rhs%%\#*}"    # Del in line right comments
+        rhs="${rhs%%*( )}"   # Del trailing spaces
+        rhs="${rhs%\"*}"     # Del opening string quotes
+        rhs="${rhs#\"*}"     # Del closing string quotes
+        echo "$rhs"
+    fi
+  done < $1
+}
+
 

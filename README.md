@@ -86,6 +86,20 @@ OPTIONS:
 -v
    optional parameter, default=no verbose
    Verbose mode.
+
+-u UPGRADE_PARTITIONS : EXPERIMENTAL OPTION - NOT TESTED
+   UPGRADE_PARTITIONS="BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>", optional parameter
+   Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
+   ALL FILES from /media/user/LEDE_boot and /media/user/LEDE_root will be DELETED.
+   example: -u BOOT=/dev/mmcblk0p6:/media/user/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/user/LEDE_root
+   Assume that:
+    - boot partition is mounted in /media/user/LEDE_boot
+    - root partition is mounted in /media/user/LEDE_root
+    - boot partition on RPi is /dev/mmcblk0p6
+    - root partition on RPi is /dev/mmcblk0p7
+
+-h
+   Display help and exit.
 ```
 
 ### Examples
@@ -146,7 +160,7 @@ reboot
 sudo apt install kpartx
 ```
 ## To do / roadmap
-- script to upgrade existing LEDE instalation on NOOBS/PINN SD card.
+- testing of upgrade existing LEDE instalation on NOOBS/PINN SD card.
 
 ## License
 

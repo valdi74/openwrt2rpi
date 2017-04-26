@@ -23,7 +23,7 @@ STDOUT="/dev/null"
 echo "LEDE2RPi version ${PROGRAM_VERSION}"
 
 BAD_PARAMS=N
-while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:cqvph" opt; do
+while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:u:cqvph" opt; do
   case $opt in
     m) RASPBERRY_MODEL="$OPTARG"
     ;;
@@ -58,6 +58,8 @@ while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:cqvph" opt; do
     p) PAUSE_AFTER_MOUNT=T
     ;;
     h) HELP=T
+    ;;
+    u) UPGRADE_PARTITIONS="$OPTARG"
     ;;
     \?) echo "Invalid option -$OPTARG" >&2; BAD_PARAMS=T
     ;;
@@ -133,6 +135,20 @@ OPTIONS:
 -v
    optional parameter, default=no verbose
    Verbose mode.
+
+-u UPGRADE_PARTITIONS : EXPERIMENTAL OPTION - NOT TESTED
+   UPGRADE_PARTITIONS="BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>", optional parameter
+   Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
+   ALL FILES from /media/user/LEDE_boot and /media/user/LEDE_root will be DELETED.
+   example: -u BOOT=/dev/mmcblk0p6:/media/user/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/user/LEDE_root
+   Assume that:
+    - boot partition is mounted in /media/user/LEDE_boot
+    - root partition is mounted in /media/user/LEDE_root
+    - boot partition on RPi is /dev/mmcblk0p6
+    - root partition on RPi is /dev/mmcblk0p7
+
+-h
+   Display help and exit.
 "
   exit
 fi
@@ -182,7 +198,52 @@ if [ "$VERBOSE" == "T" ]; then
   print_var_name_value_verbose LEDE_SUBTARGET
   print_var_name_value_verbose LEDE_RELEASE
   print_var_name_value_verbose LEDE_DOWNLOAD
+  print_var_name_value_verbose UPGRADE_PARTITIONS
 fi
+
+if [ ! -z "$UPGRADE_PARTITIONS" ]; then
+  UPGRADE_BOOT_CONFIG=`echo "$UPGRADE_PARTITIONS" | cut -d, -f1`
+  [ "${UPGRADE_BOOT_CONFIG:0:5}" != "BOOT=" ] && error_exit "Missing 'BOOT=' in upgrade config: ${UPGRADE_PARTITIONS}"
+
+  UPGRADE_RPI_DEV_BOOT=`echo ${UPGRADE_BOOT_CONFIG:5} | cut -d\: -f1`
+  print_var_name_value_verbose UPGRADE_RPI_DEV_BOOT
+  [ -z "$UPGRADE_RPI_DEV_BOOT" ] && error_exit "Missing RPi device in upgrade BOOT config: ${UPGRADE_BOOT_CONFIG:5}"
+
+  UPGRADE_DIR_BOOT=`echo ${UPGRADE_BOOT_CONFIG:5} | cut -d\: -f2`
+  print_var_name_value_verbose UPGRADE_DIR_BOOT
+  [ -z "$UPGRADE_DIR_BOOT" ] && error_exit "Missing local dir in upgrade BOOT config: ${UPGRADE_BOOT_CONFIG:5}"
+  [ ! -d "$UPGRADE_DIR_BOOT" ] && error_exit "Upgrade BOOT config: ${UPGRADE_DIR_BOOT} is not a directory"
+
+  UPGRADE_ROOT_CONFIG=`echo "$UPGRADE_PARTITIONS" | cut -d, -f2`
+  [ "${UPGRADE_ROOT_CONFIG:0:5}" != "ROOT=" ] && error_exit "Missing 'ROOT=' in upgrade config: ${UPGRADE_PARTITIONS}"
+
+  UPGRADE_RPI_DEV_ROOT=`echo ${UPGRADE_ROOT_CONFIG:5} | cut -d\: -f1`
+  print_var_name_value_verbose UPGRADE_RPI_DEV_ROOT
+  [ -z "$UPGRADE_RPI_DEV_ROOT" ] && error_exit "Missing RPi device in upgrade ROOT config: ${UPGRADE_ROOT_CONFIG:5}"
+
+  UPGRADE_DIR_ROOT=`echo ${UPGRADE_ROOT_CONFIG:5} | cut -d\: -f2`
+  print_var_name_value_verbose UPGRADE_DIR_ROOT
+  [ -z "$UPGRADE_DIR_ROOT" ] && error_exit "Missing local dir in upgrade ROOT config: ${UPGRADE_ROOT_CONFIG:5}"
+  [ ! -d "$UPGRADE_DIR_ROOT" ] && error_exit "Upgrade ROOT config: ${UPGRADE_DIR_ROOT} is not a directory"
+
+  ANSWER=`input_line "Are you sure to delete all files from $UPGRADE_DIR_BOOT and $UPGRADE_DIR_ROOT and upgrade LEDE instalation? Enter 'yes': "`
+  [ "$ANSWER" != "yes" ] && error_exit "User abort"
+fi
+
+unmount_images() {
+	sync
+
+  print_info "Unmounting ${BLOCK_DEVICE_ROOT} -> ${MEDIA_USER_DIR}/${ROOT_UUID}\n"
+	udisksctl unmount --block-device "${BLOCK_DEVICE_ROOT}" > "${STDOUT}"
+	sleep 1
+
+	print_info "Unmounting ${BLOCK_DEVICE_BOOT} -> ${MEDIA_USER_DIR}/${BOOT_UUID}\n"
+	udisksctl unmount --block-device "${BLOCK_DEVICE_BOOT}" > "${STDOUT}"
+	sleep 1
+
+	print_info "Delete device maps from ${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}\n"
+	sudo kpartx -d${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" > "${STDOUT}"
+}
 
 cd "${WORKING_DIR}"
 mkdir -p "${DESTINATION_DIR}"
@@ -291,53 +352,49 @@ fi
 
 [ "$PAUSE_AFTER_MOUNT" == "T" ] && pause "Now you can modify files in boot (${MEDIA_USER_DIR}/${BOOT_UUID}) and root (${MEDIA_USER_DIR}/${ROOT_UUID}) partitions. Press ENTER when done."
 
-tar -cpf "${NOOBS_BOOT_IMAGE}" .
-#ls "${NOOBS_BOOT_IMAGE}" -l --block-size=1MB
-BOOT_TAR_SIZE=`du -m "${NOOBS_BOOT_IMAGE}" | cut -f1`
-print_var_name_value_verbose BOOT_TAR_SIZE
-print_info "xz compressing partition boot..."
-xz -9 -e "${NOOBS_BOOT_IMAGE}"
-print_info "done\n"
 
-cd "${MEDIA_USER_DIR}/${ROOT_UUID}"
+if [ -z "$UPGRADE_PARTITIONS" ]; then
 
-LEDE_VERSION_ID=$(get_param_from_file ${LEDE_VERSION_FILE} VERSION_ID)
-LEDE_BUILD_ID=$(get_param_from_file ${LEDE_VERSION_FILE} BUILD_ID)
-LEDE_VERSION="${LEDE_VERSION_ID} ${LEDE_BUILD_ID}"
-print_var_name_value_verbose LEDE_VERSION
+  cd "${MEDIA_USER_DIR}/${BOOT_UUID}"
 
-sudo tar -cpf "${NOOBS_ROOT_IMAGE}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/*
-sudo chown ${USER}:${USER} "${NOOBS_ROOT_IMAGE}"
-#ls "${NOOBS_ROOT_IMAGE}" -l --block-size=1MB
-ROOT_TAR_SIZE=`du -m "${NOOBS_ROOT_IMAGE}" | cut -f1`
-print_var_name_value_verbose ROOT_TAR_SIZE
-print_info "xz compressing partition root..."
-xz -9 -e "${NOOBS_ROOT_IMAGE}"
-print_info "done\n"
+	tar -cpf "${NOOBS_BOOT_IMAGE}" .
+	#ls "${NOOBS_BOOT_IMAGE}" -l --block-size=1MB
+	BOOT_TAR_SIZE=`du -m "${NOOBS_BOOT_IMAGE}" | cut -f1`
+	print_var_name_value_verbose BOOT_TAR_SIZE
+	print_info "xz compressing partition boot..."
+	xz -9 -e "${NOOBS_BOOT_IMAGE}"
+	print_info "done\n"
 
-cd "${DESTINATION_DIR}"
+	cd "${MEDIA_USER_DIR}/${ROOT_UUID}"
 
-print_info "Unmounting ${BLOCK_DEVICE_ROOT} -> ${MEDIA_USER_DIR}/${ROOT_UUID}\n"
-udisksctl unmount --block-device "${BLOCK_DEVICE_ROOT}" > "${STDOUT}"
-sleep 1
+	LEDE_VERSION_ID=$(get_param_from_file ${LEDE_VERSION_FILE} VERSION_ID)
+	LEDE_BUILD_ID=$(get_param_from_file ${LEDE_VERSION_FILE} BUILD_ID)
+	LEDE_VERSION="${LEDE_VERSION_ID} ${LEDE_BUILD_ID}"
+	print_var_name_value_verbose LEDE_VERSION
 
-print_info "Unmounting ${BLOCK_DEVICE_BOOT} -> ${MEDIA_USER_DIR}/${BOOT_UUID}\n"
-udisksctl unmount --block-device "${BLOCK_DEVICE_BOOT}" > "${STDOUT}"
-sleep 1
+	sudo tar -cpf "${NOOBS_ROOT_IMAGE}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/*
+	sudo chown ${USER}:${USER} "${NOOBS_ROOT_IMAGE}"
+	#ls "${NOOBS_ROOT_IMAGE}" -l --block-size=1MB
+	ROOT_TAR_SIZE=`du -m "${NOOBS_ROOT_IMAGE}" | cut -f1`
+	print_var_name_value_verbose ROOT_TAR_SIZE
+	print_info "xz compressing partition root..."
+	xz -9 -e "${NOOBS_ROOT_IMAGE}"
+	print_info "done\n"
 
-print_info "Delete device maps from ${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}\n"
-sudo kpartx -d${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" > "${STDOUT}"
+	cd "${DESTINATION_DIR}"
 
-##################################################################### partition_setup.sh
-print_info "Creating partition_setup.sh\n"
+  unmount_images
+
+	##################################################################### partition_setup.sh
+	print_info "Creating partition_setup.sh\n"
 cat <<'EOF' > partition_setup.sh
 #!/bin/sh
 
 set -ex
 
 if [ -z "\$part1" ] || [ -z "\$part2" ]; then
-  printf "Error: missing environment variable part1 or part2\n" 1>&2
-  exit 1
+	printf "Error: missing environment variable part1 or part2\n" 1>&2
+	exit 1
 fi
 
 mkdir -p /tmp/1 /tmp/2
@@ -352,48 +409,48 @@ sed /tmp/2/etc/fstab -i -e "s|^.* /boot |\${part1}  /boot |"
 umount /tmp/1
 umount /tmp/2
 EOF
-##################################################################### partitions.json
-print_info "Creating partitions.json\n"
+	##################################################################### partitions.json
+	print_info "Creating partitions.json\n"
 cat <<EOF > partitions.json
 {
-  "partitions": [
-    {
-      "label": "${BOOT_PART_LABEL}",
-      "filesystem_type": "FAT",
-      "partition_size_nominal": $LEDE_BOOT_PART_SIZE,
-      "want_maximised": false,
-      "uncompressed_tarball_size": $BOOT_TAR_SIZE
-    },
-    {
-      "label": "${ROOT_PART_LABEL}",
-      "filesystem_type": "ext4",
-      "partition_size_nominal": $LEDE_ROOT_PART_SIZE,
-      "want_maximised": false,
-      "mkfs_options": "-O ^huge_file",
-      "uncompressed_tarball_size": $ROOT_TAR_SIZE
-    }
-  ]
+	"partitions": [
+	  {
+	    "label": "${BOOT_PART_LABEL}",
+	    "filesystem_type": "FAT",
+	    "partition_size_nominal": $LEDE_BOOT_PART_SIZE,
+	    "want_maximised": false,
+	    "uncompressed_tarball_size": $BOOT_TAR_SIZE
+	  },
+	  {
+	    "label": "${ROOT_PART_LABEL}",
+	    "filesystem_type": "ext4",
+	    "partition_size_nominal": $LEDE_ROOT_PART_SIZE,
+	    "want_maximised": false,
+	    "mkfs_options": "-O ^huge_file",
+	    "uncompressed_tarball_size": $ROOT_TAR_SIZE
+	  }
+	]
 }
 EOF
-##################################################################### os.json
-print_info "Creating os.json\n"
+	##################################################################### os.json
+	print_info "Creating os.json\n"
 cat <<EOF > os.json
 {
-  "name": "${LEDE_OS_NAME}",
-  "version": "${LEDE_VERSION}",
-  "release_date": "${LEDE_RELEASE_DATE}",
-  "kernel": "${LEDE_KERNEL_VER}",
-  "description": "LEDE for the Raspberry ${RASPBERRY_MODEL}",
-  "url": "${LEDE_DOWNLOAD}",
-  "supported_hex_revisions": "${RASPBERRY_HEX_REVISIONS}",
-  "supported_models": [
-        ${RASPBERRY_MODELS}
-  ],
-  "feature_level": 0
+	"name": "${LEDE_OS_NAME}",
+	"version": "${LEDE_VERSION}",
+	"release_date": "${LEDE_RELEASE_DATE}",
+	"kernel": "${LEDE_KERNEL_VER}",
+	"description": "LEDE for the Raspberry ${RASPBERRY_MODEL}",
+	"url": "${LEDE_DOWNLOAD}",
+	"supported_hex_revisions": "${RASPBERRY_HEX_REVISIONS}",
+	"supported_models": [
+	      ${RASPBERRY_MODELS}
+	],
+	"feature_level": 0
 }
 EOF
-##################################################################### LOGO: xxd -ps -c72 lede_40x40_source.png
-print_info "Creating ${LEDE_OS_NAME}.png\n"
+	##################################################################### LOGO: xxd -ps -c72 lede_40x40_source.png
+	print_info "Creating ${LEDE_OS_NAME}.png\n"
 xxd -r -ps <<'EOF' >${LEDE_OS_NAME}.png
 89504e470d0a1a0a0000000d4948445200000028000000280802000000039c2f3a0000028f4944415458c3ed58d1b59b300c75de610131022b9811c8085e01464846801160843042
 18018f108fe03b02ef43c131c6a4f49df6d1d3565f80a57b2559929d9ca6691247c887384822c4c698038801f47d0fe05f4af57fe2bf9cf81bea992589f5317c2788e8bd67ace0be
@@ -406,8 +463,36 @@ e0b3135868bb0bd0736d0fb153657dcfca21acbc7a7a208097feccbdbbb89c9b7386b0e486e0d452
 3d0daeb720a227ee8bd90cc3a0b5664422e16f8a3b854a55ca427ef95ecd3151e0eac6694fc15b24ad3baa3a99d528e802be4dc6db693dde8306037ec89dccfb445bee623dbfb74a
 6ddbb937c4f06c106250e4e8408c87b34e04a26c27b1985bf92b7f806059e67b265730ab7fc1b1b8735c7f0277345a2a632c143f0000000049454e44ae426082
 EOF
-#####################################################################
+	#####################################################################
 
-print_info "\nDone. LEDE files for NOOBS are stored in ${DESTINATION_DIR} directory
+	print_info "\nDone. LEDE files for NOOBS are stored in ${DESTINATION_DIR} directory
 Now you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n"
+else # upgrade partitions
+  UPGRADE_BACKUP_DIR="${WORKING_SUB_DIR}/bakcup"
+  mkdir -p "${UPGRADE_BACKUP_DIR}" "${UPGRADE_BACKUP_DIR}/etc"
+
+  print_info "Upgrading boot partition"
+  cp "${UPGRADE_DIR_BOOT}/cmdline.txt" "${UPGRADE_BACKUP_DIR}"
+  cp "${UPGRADE_DIR_BOOT}/os_config.json" "${UPGRADE_BACKUP_DIR}"
+  sudo find "${UPGRADE_DIR_BOOT}" -mindepth 1 -delete
+pause "deb1"
+  sudo cp -a "${MEDIA_USER_DIR}/${BOOT_UUID}/." "${UPGRADE_DIR_BOOT}"
+  sudo sed "${UPGRADE_DIR_BOOT}/cmdline.txt" -i -e "s|root=/dev/[^ ]*|root=${UPGRADE_RPI_DEV_ROOT}|"
+  sudo cp "${UPGRADE_BACKUP_DIR}/os_config.json" "${UPGRADE_DIR_BOOT}"
+
+  print_info "Upgrading root partition"
+  sudo cp -a "${UPGRADE_DIR_ROOT}/etc" "${UPGRADE_BACKUP_DIR}"
+  sudo find "${UPGRADE_DIR_ROOT}" -mindepth 1 -delete
+pause "deb2"
+  sudo cp -a "${MEDIA_USER_DIR}/${ROOT_UUID}/." "${UPGRADE_DIR_ROOT}"
+  sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* / |${UPGRADE_RPI_DEV_ROOT}  / |"
+  sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* /boot |${UPGRADE_RPI_DEV_BOOT}  /boot |"
+
+	cd "${DESTINATION_DIR}"
+
+  unmount_images
+
+	print_info "\nDone. LEDE instalation in ${UPGRADE_DIR_BOOT} and ${UPGRADE_DIR_ROOT} upgraded.
+Backup files copied to directory ${UPGRADE_BACKUP_DIR}\n"
+fi
 
