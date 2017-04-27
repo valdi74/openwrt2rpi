@@ -37,7 +37,7 @@ OPTIONS:
 
 -p
    optional parameter
-   Pause after boot and root partitions mount. You can add/modify files on both partitions in /media/$USER/[UUID] directories.
+   Pause after boot and root partitions mount. You can add/modify files on both partitions in /media/$USER/[MOUNT_NAME] directories.
 
 -a MODULES_LIST
    MODULES_LIST='module1 module2 ...', optional parameter
@@ -88,15 +88,19 @@ OPTIONS:
    Verbose mode.
 
 -u UPGRADE_PARTITIONS : EXPERIMENTAL OPTION - NOT TESTED
-   UPGRADE_PARTITIONS="BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>", optional parameter
+   UPGRADE_PARTITIONS='BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>', optional parameter
    Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
-   ALL FILES from /media/user/LEDE_boot and /media/user/LEDE_root will be DELETED.
-   example: -u BOOT=/dev/mmcblk0p6:/media/user/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/user/LEDE_root
+   WARNING: all files from <local_boot_dir> and <local_root_dir> will be DELETED.
+   example: -u BOOT=/dev/mmcblk0p6:/media/$USER/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/$USER/LEDE_root
    Assume that:
-    - boot partition is mounted in /media/user/LEDE_boot
-    - root partition is mounted in /media/user/LEDE_root
     - boot partition on RPi is /dev/mmcblk0p6
+    - boot partition is now mounted in /media/$USER/LEDE_boot
     - root partition on RPi is /dev/mmcblk0p7
+    - root partition is now mounted in /media/$USER/LEDE_root
+
+-w
+   optional parameter, default=generate NOOBS/PINN files
+   Don't generate NOOBS/PINN files in LEDE directory. Useful with -u (only upgrade).
 
 -h
    Display help and exit.

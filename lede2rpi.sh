@@ -3,7 +3,7 @@
 . ${0%/*}/common_defs.sh
 
 #defaults
-PROGRAM_VERSION="1.02"
+PROGRAM_VERSION="1.03"
 WORKING_DIR="${TMP_DIR}"
 LEDE_BOOT_PART_SIZE=25
 LEDE_ROOT_PART_SIZE=300
@@ -23,7 +23,7 @@ STDOUT="/dev/null"
 echo "LEDE2RPi version ${PROGRAM_VERSION}"
 
 BAD_PARAMS=N
-while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:u:cqvph" opt; do
+while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:u:cqvpwh" opt; do
   case $opt in
     m) RASPBERRY_MODEL="$OPTARG"
     ;;
@@ -49,6 +49,8 @@ while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:u:cqvph" opt; do
     ;;
     o) LEDE_OS_NAME="$OPTARG"
     ;;
+    u) UPGRADE_PARTITIONS="$OPTARG"
+    ;;
     c) RUN_INITIAL_SCRIPT_ONCE=T
     ;;
     q) QUIET=T
@@ -57,9 +59,9 @@ while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:u:cqvph" opt; do
     ;;
     p) PAUSE_AFTER_MOUNT=T
     ;;
-    h) HELP=T
+    w) DONT_GENERATE_FILES=T
     ;;
-    u) UPGRADE_PARTITIONS="$OPTARG"
+    h) HELP=T
     ;;
     \?) echo "Invalid option -$OPTARG" >&2; BAD_PARAMS=T
     ;;
@@ -86,7 +88,7 @@ OPTIONS:
 
 -p
    optional parameter
-   Pause after boot and root partitions mount. You can add/modify files on both partitions in /media/$USER/[UUID] directories.
+   Pause after boot and root partitions mount. You can add/modify files on both partitions in /media/$USER/[MOUNT_NAME] directories.
 
 -a MODULES_LIST
    MODULES_LIST='module1 module2 ...', optional parameter
@@ -137,15 +139,19 @@ OPTIONS:
    Verbose mode.
 
 -u UPGRADE_PARTITIONS : EXPERIMENTAL OPTION - NOT TESTED
-   UPGRADE_PARTITIONS="BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>", optional parameter
+   UPGRADE_PARTITIONS='BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>', optional parameter
    Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
-   ALL FILES from /media/user/LEDE_boot and /media/user/LEDE_root will be DELETED.
-   example: -u BOOT=/dev/mmcblk0p6:/media/user/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/user/LEDE_root
+   WARNING: all files from <local_boot_dir> and <local_root_dir> will be DELETED.
+   example: -u BOOT=/dev/mmcblk0p6:/media/user/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/$USER/LEDE_root
    Assume that:
-    - boot partition is mounted in /media/user/LEDE_boot
-    - root partition is mounted in /media/user/LEDE_root
     - boot partition on RPi is /dev/mmcblk0p6
+    - boot partition is now mounted in /media/$USER/LEDE_boot
     - root partition on RPi is /dev/mmcblk0p7
+    - root partition is now mounted in /media/$USER/LEDE_root
+
+-w
+   optional parameter, default=generate NOOBS/PINN files
+   Don't generate NOOBS/PINN files in LEDE directory. Useful with -u (only upgrade).
 
 -h
    Display help and exit.
@@ -233,11 +239,11 @@ fi
 unmount_images() {
 	sync
 
-  print_info "Unmounting ${BLOCK_DEVICE_ROOT} -> ${MEDIA_USER_DIR}/${ROOT_UUID}\n"
+  print_info "Unmounting ${BLOCK_DEVICE_ROOT} -> ${ROOT_PARTITION_DIR}\n"
 	udisksctl unmount --block-device "${BLOCK_DEVICE_ROOT}" > "${STDOUT}"
 	sleep 1
 
-	print_info "Unmounting ${BLOCK_DEVICE_BOOT} -> ${MEDIA_USER_DIR}/${BOOT_UUID}\n"
+	print_info "Unmounting ${BLOCK_DEVICE_BOOT} -> ${BOOT_PARTITION_DIR}\n"
 	udisksctl unmount --block-device "${BLOCK_DEVICE_BOOT}" > "${STDOUT}"
 	sleep 1
 
@@ -246,8 +252,7 @@ unmount_images() {
 }
 
 cd "${WORKING_DIR}"
-mkdir -p "${DESTINATION_DIR}"
-rm "${DESTINATION_DIR}"/* 2>/dev/null
+mkdir -p "${WORKING_SUB_DIR}"
 
 # debug
 [ "$DEBUG" != "T" ] && wget -${WGET_OPTS}O "${WORKING_SUB_DIR}/${LEDE_HTML}" "${LEDE_DOWNLOAD}"
@@ -286,13 +291,15 @@ BOOT_UUID=`udisksctl mount --block-device "${BLOCK_DEVICE_BOOT}" | grep -o "${ME
 BOOT_UUID=`basename "${BOOT_UUID}" .`
 [ -z "${BOOT_UUID}" ] && error_exit "Can't evaluate BOOT_UUID name"
 print_var_name_value_verbose BOOT_UUID
+BOOT_PARTITION_DIR="${MEDIA_USER_DIR}/${BOOT_UUID}"
 
 ROOT_UUID=`udisksctl mount --block-device "${BLOCK_DEVICE_ROOT}" | grep -o "${MEDIA_USER_DIR}/.*"`
 ROOT_UUID=`basename "${ROOT_UUID}" .`
 [ -z "${ROOT_UUID}" ] && error_exit "Can't evaluate ROOT_UUID name"
 print_var_name_value_verbose ROOT_UUID
+ROOT_PARTITION_DIR="${MEDIA_USER_DIR}/${ROOT_UUID}"
 
-cd "${MEDIA_USER_DIR}/${BOOT_UUID}"
+cd "${BOOT_PARTITION_DIR}"
 
 LEDE_KERNEL_VER=`grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" ${LEDE_KERNEL_IMAGE} | head -n1`
 LEDE_KERNEL_VER="${LEDE_KERNEL_VER:14}"
@@ -318,13 +325,13 @@ if [ ! -z "$MODULES_LIST" ]; then
   mkdir -p "${MODULES_DOWNLOAD_DIR}"
   rm "${MODULES_DOWNLOAD_DIR}"/* 2>/dev/null
 
-  for REPO_ADDR in $(grep -o 'http://.*' "${MEDIA_USER_DIR}/${ROOT_UUID}${LEDE_REPO_COFIG}"); do
+  for REPO_ADDR in $(grep -o 'http://.*' "${ROOT_PARTITION_DIR}${LEDE_REPO_COFIG}"); do
     for PACKAGE_NAME in $(wget -${WGET_OPTS}O - "${REPO_ADDR}" | grep -oP "${MODULES_PATTERN}"); do
       [ "$VERBOSE" == "T" ] && print_info "Downloading ${REPO_ADDR}/${PACKAGE_NAME}\n"
       wget -${WGET_OPTS}P "${MODULES_DOWNLOAD_DIR}" "${REPO_ADDR}/${PACKAGE_NAME}"
     done
   done
-  sudo cp -R "${MODULES_DOWNLOAD_DIR}/." "${MEDIA_USER_DIR}/${ROOT_UUID}/${MODULES_DESTINATION}"
+  sudo cp -R "${MODULES_DOWNLOAD_DIR}/." "${ROOT_PARTITION_DIR}/${MODULES_DESTINATION}"
 fi
 
 if [ ! -z "${RUN_INITIAL_SCRIPT_ONCE}" ]; then
@@ -334,7 +341,7 @@ if [ ! -z "${RUN_INITIAL_SCRIPT_ONCE}" ]; then
 
   sudo sed -i "/exit 0/i \
 ${INITIAL_SCRIPT_PATH} #lede2rpi_delete\
-" "${MEDIA_USER_DIR}/${ROOT_UUID}${RC_LOCAL}"
+" "${ROOT_PARTITION_DIR}${RC_LOCAL}"
 fi
 
 if [ ! -z "${INCLUDE_INITIAL_FILE}" ]; then
@@ -346,16 +353,14 @@ fi
 if [ ! -z "$INITIAL_SCRIPT_PATH" ]; then
   print_info "Creating initial script ${INITIAL_SCRIPT_PATH} on LEDE root partition\n"
 
-  sudo cp "${LEDE_INIT_TMP_FILE}" "${MEDIA_USER_DIR}/${ROOT_UUID}/${INITIAL_SCRIPT_PATH}"
-  sudo chmod u+x "${MEDIA_USER_DIR}/${ROOT_UUID}/$INITIAL_SCRIPT_PATH"
+  sudo cp "${LEDE_INIT_TMP_FILE}" "${ROOT_PARTITION_DIR}/${INITIAL_SCRIPT_PATH}"
+  sudo chmod u+x "${ROOT_PARTITION_DIR}/$INITIAL_SCRIPT_PATH"
 fi
 
-[ "$PAUSE_AFTER_MOUNT" == "T" ] && pause "Now you can modify files in boot (${MEDIA_USER_DIR}/${BOOT_UUID}) and root (${MEDIA_USER_DIR}/${ROOT_UUID}) partitions. Press ENTER when done."
+[ "$PAUSE_AFTER_MOUNT" == "T" ] && pause "Now you can modify files in boot (${BOOT_PARTITION_DIR}) and root (${ROOT_PARTITION_DIR}) partitions. Press ENTER when done."
 
-
-if [ -z "$UPGRADE_PARTITIONS" ]; then
-
-  cd "${MEDIA_USER_DIR}/${BOOT_UUID}"
+if [ -z "$DONT_GENERATE_FILES" ]; then
+  cd "${BOOT_PARTITION_DIR}"
 
 	tar -cpf "${NOOBS_BOOT_IMAGE}" .
 	#ls "${NOOBS_BOOT_IMAGE}" -l --block-size=1MB
@@ -365,7 +370,7 @@ if [ -z "$UPGRADE_PARTITIONS" ]; then
 	xz -9 -e "${NOOBS_BOOT_IMAGE}"
 	print_info "done\n"
 
-	cd "${MEDIA_USER_DIR}/${ROOT_UUID}"
+	cd "${ROOT_PARTITION_DIR}"
 
 	LEDE_VERSION_ID=$(get_param_from_file ${LEDE_VERSION_FILE} VERSION_ID)
 	LEDE_BUILD_ID=$(get_param_from_file ${LEDE_VERSION_FILE} BUILD_ID)
@@ -381,13 +386,12 @@ if [ -z "$UPGRADE_PARTITIONS" ]; then
 	xz -9 -e "${NOOBS_ROOT_IMAGE}"
 	print_info "done\n"
 
-	cd "${DESTINATION_DIR}"
-
-  unmount_images
+  mkdir -p "${DESTINATION_DIR}"
+  rm "${DESTINATION_DIR}"/* 2>/dev/null
 
 	##################################################################### partition_setup.sh
 	print_info "Creating partition_setup.sh\n"
-cat <<'EOF' > partition_setup.sh
+cat <<'EOF' > "${DESTINATION_DIR}/partition_setup.sh"
 #!/bin/sh
 
 set -ex
@@ -411,7 +415,7 @@ umount /tmp/2
 EOF
 	##################################################################### partitions.json
 	print_info "Creating partitions.json\n"
-cat <<EOF > partitions.json
+cat <<EOF > "${DESTINATION_DIR}/partitions.json"
 {
 	"partitions": [
 	  {
@@ -434,7 +438,7 @@ cat <<EOF > partitions.json
 EOF
 	##################################################################### os.json
 	print_info "Creating os.json\n"
-cat <<EOF > os.json
+cat <<EOF > "${DESTINATION_DIR}/os.json"
 {
 	"name": "${LEDE_OS_NAME}",
 	"version": "${LEDE_VERSION}",
@@ -451,7 +455,7 @@ cat <<EOF > os.json
 EOF
 	##################################################################### LOGO: xxd -ps -c72 lede_40x40_source.png
 	print_info "Creating ${LEDE_OS_NAME}.png\n"
-xxd -r -ps <<'EOF' >${LEDE_OS_NAME}.png
+xxd -r -ps <<'EOF' > "${DESTINATION_DIR}/${LEDE_OS_NAME}.png"
 89504e470d0a1a0a0000000d4948445200000028000000280802000000039c2f3a0000028f4944415458c3ed58d1b59b300c75de610131022b9811c8085e01464846801160843042
 18018f108fe03b02ef43c131c6a4f49df6d1d3565f80a57b2559929d9ca6691247c887384822c4c698038801f47d0fe05f4af57fe2bf9cf81bea992589f5317c2788e8bd67ace0be
 07fa6b135648d64a80e187ebf50aa06d5b1fabaa2a1f4e4a59d7b531a6aa2aa796655951144551b05ad3343c94d8a4288acbe522a6a58ce3286561adb5d63290b5d657e08f449465
@@ -465,34 +469,36 @@ e0b3135868bb0bd0736d0fb153657dcfca21acbc7a7a208097feccbdbbb89c9b7386b0e486e0d452
 EOF
 	#####################################################################
 
-	print_info "\nDone. LEDE files for NOOBS are stored in ${DESTINATION_DIR} directory
+	print_info "\nLEDE files for NOOBS are stored in ${DESTINATION_DIR} directory
 Now you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n"
-else # upgrade partitions
+fi
+
+if [ ! -z "$UPGRADE_PARTITIONS" ]; then
   UPGRADE_BACKUP_DIR="${WORKING_SUB_DIR}/bakcup"
   mkdir -p "${UPGRADE_BACKUP_DIR}" "${UPGRADE_BACKUP_DIR}/etc"
 
-  print_info "Upgrading boot partition"
+  print_info "Upgrading boot partition\n"
   cp "${UPGRADE_DIR_BOOT}/cmdline.txt" "${UPGRADE_BACKUP_DIR}"
   cp "${UPGRADE_DIR_BOOT}/os_config.json" "${UPGRADE_BACKUP_DIR}"
   sudo find "${UPGRADE_DIR_BOOT}" -mindepth 1 -delete
-pause "deb1"
-  sudo cp -a "${MEDIA_USER_DIR}/${BOOT_UUID}/." "${UPGRADE_DIR_BOOT}"
+
+  sudo cp -a "${BOOT_PARTITION_DIR}/." "${UPGRADE_DIR_BOOT}"
   sudo sed "${UPGRADE_DIR_BOOT}/cmdline.txt" -i -e "s|root=/dev/[^ ]*|root=${UPGRADE_RPI_DEV_ROOT}|"
   sudo cp "${UPGRADE_BACKUP_DIR}/os_config.json" "${UPGRADE_DIR_BOOT}"
 
-  print_info "Upgrading root partition"
+  print_info "Upgrading root partition\n"
   sudo cp -a "${UPGRADE_DIR_ROOT}/etc" "${UPGRADE_BACKUP_DIR}"
   sudo find "${UPGRADE_DIR_ROOT}" -mindepth 1 -delete
-pause "deb2"
-  sudo cp -a "${MEDIA_USER_DIR}/${ROOT_UUID}/." "${UPGRADE_DIR_ROOT}"
+
+  sudo cp -a "${ROOT_PARTITION_DIR}/." "${UPGRADE_DIR_ROOT}"
   sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* / |${UPGRADE_RPI_DEV_ROOT}  / |"
   sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* /boot |${UPGRADE_RPI_DEV_BOOT}  /boot |"
 
-	cd "${DESTINATION_DIR}"
-
-  unmount_images
-
-	print_info "\nDone. LEDE instalation in ${UPGRADE_DIR_BOOT} and ${UPGRADE_DIR_ROOT} upgraded.
-Backup files copied to directory ${UPGRADE_BACKUP_DIR}\n"
+	print_info "\nLEDE instalation in ${UPGRADE_DIR_BOOT} and ${UPGRADE_DIR_ROOT} upgraded.
+Backup files you can find in directory ${UPGRADE_BACKUP_DIR}\n"
 fi
+
+cd "${WORKING_DIR}"
+
+unmount_images
 
