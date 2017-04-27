@@ -138,11 +138,11 @@ OPTIONS:
    optional parameter, default=no verbose
    Verbose mode.
 
--u UPGRADE_PARTITIONS : EXPERIMENTAL OPTION - NOT TESTED
+-u UPGRADE_PARTITIONS
    UPGRADE_PARTITIONS='BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>', optional parameter
    Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
    WARNING: all files from <local_boot_dir> and <local_root_dir> will be DELETED.
-   example: -u BOOT=/dev/mmcblk0p6:/media/user/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/$USER/LEDE_root
+   example: -u BOOT=/dev/mmcblk0p6:/media/$USER/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/$USER/LEDE_root
    Assume that:
     - boot partition on RPi is /dev/mmcblk0p6
     - boot partition is now mounted in /media/$USER/LEDE_boot
@@ -163,7 +163,7 @@ fi
 
 [ -z "$LEDE_RELEASE" ] && echo "LEDE release not specified" && BAD_PARAMS=T
 
-[ "$BAD_PARAMS" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p] [-a MODULES_LIST] [-b MODULES_DESTINATION] [-s INITIAL_SCRIPT_PATH] [-i INCLUDE_INITIAL_FILE] [-q] [-k LEDE_BOOT_PART_SIZE] [-l LEDE_ROOT_PART_SIZE] [-n BOOT_PART_LABEL] [-e ROOT_PART_LABEL] [-o LEDE_OS_NAME]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
+[ "$BAD_PARAMS" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p] [-v] [-q] [-w] [-a MODULES_LIST] [-b MODULES_DESTINATION] [-s INITIAL_SCRIPT_PATH] [-i INCLUDE_INITIAL_FILE] [-q] [-k LEDE_BOOT_PART_SIZE] [-l LEDE_ROOT_PART_SIZE] [-n BOOT_PART_LABEL] [-e ROOT_PART_LABEL] [-o LEDE_OS_NAME] [-u UPGRADE_PARTITIONS]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
 
 case "${RASPBERRY_MODEL}" in
   "Pi")  LEDE_SUBTARGET="bcm2708"; RASPBERRY_MODELS="\"Pi Model\", \"Pi Compute Module\", \"Pi Zero\""; RASPBERRY_HEX_REVISIONS="2,3,4,5,6,7,8,9,d,e,f,10,11,12,13,14,19,0092" ;;
@@ -318,7 +318,7 @@ if [ ! -z "$MODULES_LIST" ]; then
   for MODULE in $MODULES_LIST; do
     MODULES_PATTERN=${MODULES_PATTERN}${SEPARATOR}'(?<=<a href=")'${MODULE}'_.*?\.ipk(?=">)'
     SEPARATOR="|"
-    echo 'opkg install "'${MODULES_DESTINATION}'/'${MODULE}'*.ipk"' >> "${LEDE_INIT_TMP_FILE}"
+    echo 'opkg install '${MODULES_DESTINATION}'/'${MODULE}'*.ipk' >> "${LEDE_INIT_TMP_FILE}"
   done
   [ "$DEBUG" == "T" ] && print_var_name_value_verbose MODULES_PATTERN
 
@@ -360,6 +360,9 @@ fi
 [ "$PAUSE_AFTER_MOUNT" == "T" ] && pause "Now you can modify files in boot (${BOOT_PARTITION_DIR}) and root (${ROOT_PARTITION_DIR}) partitions. Press ENTER when done."
 
 if [ -z "$DONT_GENERATE_FILES" ]; then
+  mkdir -p "${DESTINATION_DIR}"
+  rm "${DESTINATION_DIR}"/* 2>/dev/null
+
   cd "${BOOT_PARTITION_DIR}"
 
 	tar -cpf "${NOOBS_BOOT_IMAGE}" .
@@ -385,9 +388,6 @@ if [ -z "$DONT_GENERATE_FILES" ]; then
 	print_info "xz compressing partition root..."
 	xz -9 -e "${NOOBS_ROOT_IMAGE}"
 	print_info "done\n"
-
-  mkdir -p "${DESTINATION_DIR}"
-  rm "${DESTINATION_DIR}"/* 2>/dev/null
 
 	##################################################################### partition_setup.sh
 	print_info "Creating partition_setup.sh\n"
@@ -474,7 +474,7 @@ Now you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n"
 fi
 
 if [ ! -z "$UPGRADE_PARTITIONS" ]; then
-  UPGRADE_BACKUP_DIR="${WORKING_SUB_DIR}/bakcup"
+  UPGRADE_BACKUP_DIR="${WORKING_SUB_DIR}/backup"
   mkdir -p "${UPGRADE_BACKUP_DIR}" "${UPGRADE_BACKUP_DIR}/etc"
 
   print_info "Upgrading boot partition\n"

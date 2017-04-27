@@ -87,7 +87,7 @@ OPTIONS:
    optional parameter, default=no verbose
    Verbose mode.
 
--u UPGRADE_PARTITIONS : EXPERIMENTAL OPTION - NOT TESTED
+-u UPGRADE_PARTITIONS
    UPGRADE_PARTITIONS='BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>', optional parameter
    Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
    WARNING: all files from <local_boot_dir> and <local_root_dir> will be DELETED.
@@ -125,7 +125,7 @@ $ lede2rpi.sh -m Pi -r snapshot -q
 
 Download LEDE release 17.01.1 for Raspberry Pi 3, be verbose, use working dir ~/tmp/, create initial config script in /root/init_config.sh and run it once (through rc.local), include local init script ~/tmp/my_lede_init.sh, download modules for HiLink modem and nano to /root/ipk directory and pause befor making final files. Boot partition will have a size of 30 MB and the root partition will have a size of 400 MB. Final files will be created in the directory ~/tmp/lede2RPi3_17.01.1/LEDE.
 ```
-$ lede2rpi.sh -m Pi3 -r 17.01.1 -d ~/tmp/ -v -p -c -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano"  -k 30 -l 400
+$ lede2rpi.sh -m Pi3 -r 17.01.1 -d ~/tmp/ -v -p -c -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano"  -k 30 -l 400
 ```
 
 Sample local init file ~/tmp/my_lede_init.sh. Script sets local IP address, timezone (Warsaw), enables WPA2 secured Wifi AP and sets USB HiLink modem as wan interface. Finally waits 30 sec and reboots RPi.
