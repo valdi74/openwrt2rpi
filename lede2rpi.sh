@@ -1,17 +1,16 @@
 #!/bin/bash
 
-. ${0%/*}/common_defs.sh
-
 #defaults
-PROGRAM_VERSION="1.03"
-WORKING_DIR="${TMP_DIR}"
+PROGRAM_VERSION="1.04"
+MEDIA_USER_DIR="/media/${USER}"
+WORKING_DIR="/tmp"
 LEDE_BOOT_PART_SIZE=25
 LEDE_ROOT_PART_SIZE=300
 LEDE_OS_NAME="LEDE"
 BOOT_PART_LABEL="LEDE_boot"
 ROOT_PART_LABEL="LEDE_root"
 MODULES_DESTINATION="/root/ipk/"
-PAUSE_AFTER_MOUNT=N
+PAUSE_AFTER_MOUNT="N"
 RC_LOCAL="/etc/rc.local"
 WGET_OPTS="q"
 KPARTX_OPTS=""
@@ -19,6 +18,108 @@ STDOUT="/dev/null"
 
 #test run (no img file downloading/decompress):
 #DEBUG=T ./lede2rpi.sh -m Pi3 -r 17.01.1 -p -q -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot1 -e LEDE_root1 -o LEDE1
+
+colored_echo() {
+  local color=$2
+  if ! [[ $color =~ '^[0-9]$' ]] ; then
+    case $(echo $color | tr '[:upper:]' '[:lower:]') in
+      black) color=0 ;;
+      red) color=1 ;;
+      green) color=2 ;;
+      yellow) color=3 ;;
+      blue) color=4 ;;
+      magenta) color=5 ;;
+      cyan) color=6 ;;
+      white|*) color=7 ;; # white or invalid color
+    esac
+  fi
+  tput setaf $color
+  [ "$3" == "bold" ] && tput bold
+  echo -ne $1 1>&2
+  tput sgr0
+}
+
+error_exit() {
+  colored_echo "$1\n" red bold
+  exit 1
+}
+
+print_usage() {
+  echo -e "\n  Usage: ${0##*/} $1"
+  example="example:"
+  z=2
+  while [ -n "${!z}" ]; do
+    echo -e   "$example ${0##*/} ${!z}"
+    example="        "
+    let z+=1
+  done
+  echo
+  exit 1
+}
+
+print_var_name_value() {
+  if [ -z "${2}" ]; then
+    echo -ne "$1 = ${!1}\n"
+  else
+    colored_echo "$1 = ${!1}\n" "$2" "$3"
+  fi
+}
+
+print_var_name_value_verbose() {
+  [ "${VERBOSE}" == "T" ] && print_var_name_value "$1" "$2" "$3"
+}
+
+print_info() {
+  [ ! "${QUIET}" == "T" ] && colored_echo "$1" green
+}
+
+ask() {
+  local KEY_PRESSED
+
+  read -n1 -r -p "$1 (Enter/y=yes) " KEY_PRESSED
+  if [ -z "$KEY_PRESSED" ] || [ "$KEY_PRESSED" = "y" ]; then
+    echo "Y"
+  else
+    echo "N"
+  fi
+  echo >&2
+}
+
+pause() {
+  local MESSAGE
+  local KEY_PRESSED
+
+  if [ -n "$1" ]; then
+    MESSAGE=$1
+  else
+    MESSAGE="PRESS ENTER "
+  fi
+
+  echo
+  read -r -p "$MESSAGE" KEY_PRESSED
+  echo
+}
+
+input_line() {
+  local BUFFER
+
+  read -r -p "$1" BUFFER
+  echo $BUFFER
+}
+
+get_param_from_file() {
+  shopt -s extglob
+  while IFS='= ' read lhs rhs
+  do
+    if [[ ! $lhs =~ ^\ *# && -n $lhs && "$lhs" == "$2" ]]; then
+        rhs="${rhs%%\#*}"    # Del in line right comments
+        rhs="${rhs%%*( )}"   # Del trailing spaces
+        rhs="${rhs%\"*}"     # Del opening string quotes
+        rhs="${rhs#\"*}"     # Del closing string quotes
+        echo "$rhs"
+    fi
+  done < $1
+}
 
 echo "LEDE2RPi version ${PROGRAM_VERSION}"
 
@@ -189,6 +290,11 @@ LEDE_KERNEL_IMAGE="kernel*.img"
 LEDE_VERSION_FILE="usr/lib/os-release"
 LEDE_KERNEL_VER_DEFAULT="4.5"
 LEDE_REPO_COFIG="/etc/opkg/distfeeds.conf"
+UPGRADE_BACKUP_DIR="${WORKING_SUB_DIR}/backup"
+NOOBS_PARTITIONS_CONFIG_FILE="partitions.json"
+NOOBS_OS_CONFIG_FILE="os.json"
+NOOBS_ICON_FILE="${LEDE_OS_NAME}.png"
+NOOBS_PARTITION_SETUP_FILE="partition_setup.sh"
 
 [ "$DEBUG" == "T" ] && print_var_name_value DEBUG red bold
 
@@ -236,21 +342,24 @@ if [ ! -z "$UPGRADE_PARTITIONS" ]; then
   [ "$ANSWER" != "yes" ] && error_exit "User abort"
 fi
 
+unmount_image() {
+  if [ -d "$2" ]; then
+    print_info "Unmounting $1 -> $2\n"
+    while lsof -p ^$$ "$2" ; do
+      pause "Above processes are blocking directory $2. Release the lock and press ENTER."
+    done
+
+    udisksctl unmount --block-device "$1" > "${STDOUT}"
+    sleep 1
+  fi
+}
+
 unmount_images() {
   cd "${WORKING_DIR}"
   sync
 
-  if [ -d "${ROOT_PARTITION_DIR}" ]; then
-    print_info "Unmounting ${BLOCK_DEVICE_ROOT} -> ${ROOT_PARTITION_DIR}\n"
-    udisksctl unmount --block-device "${BLOCK_DEVICE_ROOT}" > "${STDOUT}"
-    sleep 1
-  fi
-
-  if [ -d "${BOOT_PARTITION_DIR}" ]; then
-    print_info "Unmounting ${BLOCK_DEVICE_BOOT} -> ${BOOT_PARTITION_DIR}\n"
-    udisksctl unmount --block-device "${BLOCK_DEVICE_BOOT}" > "${STDOUT}"
-    sleep 1
-  fi
+  unmount_image "${BLOCK_DEVICE_ROOT}" "${ROOT_PARTITION_DIR}"
+  unmount_image "${BLOCK_DEVICE_BOOT}" "${BOOT_PARTITION_DIR}"
 
   if sudo kpartx -l${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" | grep -vq "loop deleted"; then
     print_info "Deleting device maps from ${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}\n"
@@ -353,9 +462,7 @@ if [ ! -z "${RUN_INITIAL_SCRIPT_ONCE}" ]; then
 
   echo 'sed -i "/#lede2rpi_delete/d" '${RC_LOCAL} >> "${LEDE_INIT_TMP_FILE}"
 
-  sudo sed -i "/exit 0/i \
-${INITIAL_SCRIPT_PATH} #lede2rpi_delete\
-" "${ROOT_PARTITION_DIR}${RC_LOCAL}"
+  sudo sed -i "/exit 0/i ${INITIAL_SCRIPT_PATH} #lede2rpi_delete" "${ROOT_PARTITION_DIR}${RC_LOCAL}"
 fi
 
 if [ ! -z "${INCLUDE_INITIAL_FILE}" ]; then
@@ -380,8 +487,7 @@ if [ -z "$DONT_GENERATE_FILES" ]; then
   cd "${BOOT_PARTITION_DIR}"
 
   tar -cpf "${NOOBS_BOOT_IMAGE}" . || clean_and_exit "tar boot image failed"
-  #ls "${NOOBS_BOOT_IMAGE}" -l --block-size=1MB
-  BOOT_TAR_SIZE=`du -m "${NOOBS_BOOT_IMAGE}" | cut -f1`
+  BOOT_TAR_SIZE=`du -m "${NOOBS_BOOT_IMAGE}" | cut -f1` #ls "${NOOBS_BOOT_IMAGE}" -l --block-size=1MB
   print_var_name_value_verbose BOOT_TAR_SIZE
   print_info "xz compressing partition boot..."
   xz -9 -e "${NOOBS_BOOT_IMAGE}"
@@ -396,7 +502,6 @@ if [ -z "$DONT_GENERATE_FILES" ]; then
 
   sudo tar -cpf "${NOOBS_ROOT_IMAGE}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/* || clean_and_exit "tar root image failed"
   sudo chown ${USER}:${USER} "${NOOBS_ROOT_IMAGE}"
-  #ls "${NOOBS_ROOT_IMAGE}" -l --block-size=1MB
   ROOT_TAR_SIZE=`du -m "${NOOBS_ROOT_IMAGE}" | cut -f1`
   print_var_name_value_verbose ROOT_TAR_SIZE
   print_info "xz compressing partition root..."
@@ -404,8 +509,8 @@ if [ -z "$DONT_GENERATE_FILES" ]; then
   print_info "done\n"
 
   ##################################################################### partition_setup.sh
-  print_info "Creating partition_setup.sh\n"
-cat <<'EOF' > "${DESTINATION_DIR}/partition_setup.sh"
+  print_info "Creating ${NOOBS_PARTITION_SETUP_FILE}\n"
+cat <<'EOF' > "${DESTINATION_DIR}/${NOOBS_PARTITION_SETUP_FILE}"
 #!/bin/sh
 
 set -ex
@@ -428,31 +533,31 @@ umount /tmp/1
 umount /tmp/2
 EOF
   ##################################################################### partitions.json
-  print_info "Creating partitions.json\n"
-cat <<EOF > "${DESTINATION_DIR}/partitions.json"
+  print_info "Creating ${NOOBS_PARTITIONS_CONFIG_FILE}\n"
+cat <<EOF > "${DESTINATION_DIR}/${NOOBS_PARTITIONS_CONFIG_FILE}"
 {
   "partitions": [
     {
       "label": "${BOOT_PART_LABEL}",
       "filesystem_type": "FAT",
-      "partition_size_nominal": $LEDE_BOOT_PART_SIZE,
+      "partition_size_nominal": ${LEDE_BOOT_PART_SIZE},
       "want_maximised": false,
-      "uncompressed_tarball_size": $BOOT_TAR_SIZE
+      "uncompressed_tarball_size": ${BOOT_TAR_SIZE}
     },
     {
       "label": "${ROOT_PART_LABEL}",
       "filesystem_type": "ext4",
-      "partition_size_nominal": $LEDE_ROOT_PART_SIZE,
+      "partition_size_nominal": ${LEDE_ROOT_PART_SIZE},
       "want_maximised": false,
       "mkfs_options": "-O ^huge_file",
-      "uncompressed_tarball_size": $ROOT_TAR_SIZE
+      "uncompressed_tarball_size": ${ROOT_TAR_SIZE}
     }
   ]
 }
 EOF
   ##################################################################### os.json
-  print_info "Creating os.json\n"
-cat <<EOF > "${DESTINATION_DIR}/os.json"
+  print_info "Creating ${NOOBS_OS_CONFIG_FILE}\n"
+cat <<EOF > "${DESTINATION_DIR}/${NOOBS_OS_CONFIG_FILE}"
 {
   "name": "${LEDE_OS_NAME}",
   "version": "${LEDE_VERSION}",
@@ -468,8 +573,8 @@ cat <<EOF > "${DESTINATION_DIR}/os.json"
 }
 EOF
   ##################################################################### LOGO: xxd -ps -c72 lede_40x40_source.png
-  print_info "Creating ${LEDE_OS_NAME}.png\n"
-xxd -r -ps <<'EOF' > "${DESTINATION_DIR}/${LEDE_OS_NAME}.png"
+  print_info "Creating ${NOOBS_ICON_FILE}\n"
+xxd -r -ps <<'EOF' > "${DESTINATION_DIR}/${NOOBS_ICON_FILE}"
 89504e470d0a1a0a0000000d4948445200000028000000280802000000039c2f3a0000028f4944415458c3ed58d1b59b300c75de610131022b9811c8085e01464846801160843042
 18018f108fe03b02ef43c131c6a4f49df6d1d3565f80a57b2559929d9ca6691247c887384822c4c698038801f47d0fe05f4af57fe2bf9cf81bea992589f5317c2788e8bd67ace0be
 07fa6b135648d64a80e187ebf50aa06d5b1fabaa2a1f4e4a59d7b531a6aa2aa796655951144551b05ad3343c94d8a4288acbe522a6a58ce3286561adb5d63290b5d657e08f449465
@@ -483,12 +588,10 @@ e0b3135868bb0bd0736d0fb153657dcfca21acbc7a7a208097feccbdbbb89c9b7386b0e486e0d452
 EOF
   #####################################################################
 
-  print_info "\nLEDE files for NOOBS are stored in ${DESTINATION_DIR} directory
-Now you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n"
+  print_info "\nLEDE files for NOOBS are stored in ${DESTINATION_DIR} directory.\nNow you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n"
 fi
 
 if [ ! -z "$UPGRADE_PARTITIONS" ]; then
-  UPGRADE_BACKUP_DIR="${WORKING_SUB_DIR}/backup"
   mkdir -p "${UPGRADE_BACKUP_DIR}" "${UPGRADE_BACKUP_DIR}/etc"
 
   print_info "Upgrading boot partition\n"
@@ -508,8 +611,7 @@ if [ ! -z "$UPGRADE_PARTITIONS" ]; then
   sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* / |${UPGRADE_RPI_DEV_ROOT}  / |"
   sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* /boot |${UPGRADE_RPI_DEV_BOOT}  /boot |"
 
-  print_info "\nLEDE instalation in ${UPGRADE_DIR_BOOT} and ${UPGRADE_DIR_ROOT} upgraded.
-Backup files you can find in directory ${UPGRADE_BACKUP_DIR}\n"
+  print_info "\nLEDE instalation in ${UPGRADE_DIR_BOOT} and ${UPGRADE_DIR_ROOT} upgraded.\nBackup files you can find in directory ${UPGRADE_BACKUP_DIR}\n"
 fi
 
 unmount_images

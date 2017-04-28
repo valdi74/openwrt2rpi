@@ -164,7 +164,7 @@ reboot
 sudo apt install kpartx
 ```
 ## To do / roadmap
-- testing of upgrade existing LEDE instalation on NOOBS/PINN SD card.
+- waiting for sugestions
 
 ## License
 
