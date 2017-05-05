@@ -55,6 +55,11 @@ OPTIONS:
    MODULES_LIST=<include_initial_script_path>, optional parameter
    Path to local script, to be included in initial configuration script INITIAL_SCRIPT_PATH.
 
+-g RUN_COMMAND_AFTER_MOUNT
+   RUN_COMMAND_AFTER_MOUNT=<command_to_run>, optional parameter
+   Command to run after boot and root partitions mount.
+   The command will receive two parameters: boot and root partitions mount directory.
+
 -c
    optional parameter, default=no autorun initial script
    Run initial script INITIAL_SCRIPT_PATH once. Path to initial script will be added do /etc/rc.local and removed after first run.
@@ -125,39 +130,10 @@ $ lede2rpi.sh -m Pi -r snapshot -q
 
 Download LEDE release 17.01.1 for Raspberry Pi 3, be verbose, use working dir ~/tmp/, create initial config script in /root/init_config.sh and run it once (through rc.local), include local init script ~/tmp/my_lede_init.sh, download modules for HiLink modem and nano to /root/ipk directory and pause befor making final files. Boot partition will have a size of 30 MB and the root partition will have a size of 400 MB. Final files will be created in the directory ~/tmp/lede2RPi3_17.01.1/LEDE.
 ```
-$ lede2rpi.sh -m Pi3 -r 17.01.1 -d ~/tmp/ -v -p -c -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano"  -k 30 -l 400
+$ lede2rpi.sh -m Pi3 -r 17.01.1 -d ~/tmp/ -v -p -c -s /root/init_config.sh -i ./user_lede_init.sh -b /root/ipk -a "kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano" -k 30 -l 400
 ```
 
-Sample local init file ~/tmp/my_lede_init.sh. Script sets local IP address, timezone (Warsaw), enables WPA2 secured Wifi AP and sets USB HiLink modem as wan interface. Finally waits 30 sec and reboots RPi.
-```
-LAN_IP="192.168.10.1"
-
-uci set system.@system[0].timezone=CET-1CEST,M3.5.0,M10.5.0/3
-uci commit system
-
-uci set wireless.@wifi-device[0].disabled=0
-uci set wireless.@wifi-device[0].channel=11
-uci set wireless.@wifi-iface[0].ssid=DarthVader
-uci set wireless.@wifi-iface[0].encryption=psk2
-uci set wireless.@wifi-iface[0].key=secretpassword
-uci commit wireless
-
-uci set network.lan.ipaddr=${LAN_IP}
-uci del network.wan
-uci set network.wan=interface
-uci set network.wan.proto=dhcp
-uci set network.wan.ifname=eth1
-uci commit network
-
-echo "
-${LAN_IP} ruter ruter.lan ruter.local
-" >> /etc/hosts
-
-sync
-sleep 30
-sync
-reboot
-```
+Sample local init file user_lede_init.sh sets local IP address, timezone (Warsaw), enables WPA2 secured Wifi AP, sets USB HiLink modem as wan interface and makes simple script for shutdown button on GPIO 22. Finally waits 10 sec and reboots RPi.
 
 ## Requirements
 ```

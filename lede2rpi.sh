@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #defaults
-PROGRAM_VERSION="1.04"
+PROGRAM_VERSION="1.05"
 MEDIA_USER_DIR="/media/${USER}"
 WORKING_DIR="/tmp"
 LEDE_BOOT_PART_SIZE=25
@@ -15,6 +15,7 @@ RC_LOCAL="/etc/rc.local"
 WGET_OPTS="q"
 KPARTX_OPTS=""
 STDOUT="/dev/null"
+TRAP_SIGNALS="SIGHUP SIGINT SIGTERM ERR EXIT"
 
 #test run (no img file downloading/decompress):
 #DEBUG=T ./lede2rpi.sh -m Pi3 -r 17.01.1 -p -q -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot1 -e LEDE_root1 -o LEDE1
@@ -58,7 +59,7 @@ print_usage() {
 }
 
 print_var_name_value() {
-  if [ -z "${2}" ]; then
+  if [ -z "$2" ]; then
     echo -ne "$1 = ${!1}\n"
   else
     colored_echo "$1 = ${!1}\n" "$2" "$3"
@@ -66,11 +67,15 @@ print_var_name_value() {
 }
 
 print_var_name_value_verbose() {
-  [ "${VERBOSE}" == "T" ] && print_var_name_value "$1" "$2" "$3"
+  if [ "${VERBOSE}" == "T" ]; then
+    print_var_name_value "$1" "$2" "$3"
+  fi
 }
 
 print_info() {
-  [ ! "${QUIET}" == "T" ] && colored_echo "$1" green
+  if [ ! "${QUIET}" == "T" ]; then
+    colored_echo "$1" green
+  fi
 }
 
 ask() {
@@ -124,7 +129,7 @@ get_param_from_file() {
 echo "LEDE2RPi version ${PROGRAM_VERSION}"
 
 BAD_PARAMS=N
-while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:u:cqvpwh" opt; do
+while getopts ":m:r:d:a:b:s:i:g:k:l:n:e:o:u:cqvpwh" opt; do
   case $opt in
     m) RASPBERRY_MODEL="$OPTARG"
     ;;
@@ -139,6 +144,8 @@ while getopts ":m:r:d:a:b:s:i:k:l:n:e:o:u:cqvpwh" opt; do
     s) INITIAL_SCRIPT_PATH="$OPTARG"
     ;;
     i) INCLUDE_INITIAL_FILE="$OPTARG"
+    ;;
+    g) RUN_COMMAND_AFTER_MOUNT="$OPTARG"
     ;;
     k) LEDE_BOOT_PART_SIZE="$OPTARG"
     ;;
@@ -207,6 +214,11 @@ OPTIONS:
    MODULES_LIST=<include_initial_script_path>, optional parameter
    Path to local script, to be included in initial configuration script INITIAL_SCRIPT_PATH.
 
+-g RUN_COMMAND_AFTER_MOUNT
+   RUN_COMMAND_AFTER_MOUNT=<command_to_run>, optional parameter
+   Command to run after boot and root partitions mount.
+   The command will receive two parameters: boot and root partitions mount directory.
+
 -c
    optional parameter, default=no autorun initial script
    Run initial script INITIAL_SCRIPT_PATH once. Path to initial script will be added do /etc/rc.local and removed after first run.
@@ -264,7 +276,7 @@ fi
 
 [ -z "$LEDE_RELEASE" ] && echo "LEDE release not specified" && BAD_PARAMS=T
 
-[ "$BAD_PARAMS" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p] [-v] [-q] [-w] [-a MODULES_LIST] [-b MODULES_DESTINATION] [-s INITIAL_SCRIPT_PATH] [-i INCLUDE_INITIAL_FILE] [-q] [-k LEDE_BOOT_PART_SIZE] [-l LEDE_ROOT_PART_SIZE] [-n BOOT_PART_LABEL] [-e ROOT_PART_LABEL] [-o LEDE_OS_NAME] [-u UPGRADE_PARTITIONS]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
+[ "$BAD_PARAMS" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p] [-v] [-q] [-w] [-a MODULES_LIST] [-b MODULES_DESTINATION] [-s INITIAL_SCRIPT_PATH] [-i INCLUDE_INITIAL_FILE] [-g RUN_COMMAND_AFTER_MOUNT] [-q] [-k LEDE_BOOT_PART_SIZE] [-l LEDE_ROOT_PART_SIZE] [-n BOOT_PART_LABEL] [-e ROOT_PART_LABEL] [-o LEDE_OS_NAME] [-u UPGRADE_PARTITIONS]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
 
 case "${RASPBERRY_MODEL}" in
   "Pi")  LEDE_SUBTARGET="bcm2708"; RASPBERRY_MODELS="\"Pi Model\", \"Pi Compute Module\", \"Pi Zero\""; RASPBERRY_HEX_REVISIONS="2,3,4,5,6,7,8,9,d,e,f,10,11,12,13,14,19,0092" ;;
@@ -355,26 +367,31 @@ unmount_image() {
 }
 
 unmount_images() {
-  cd "${WORKING_DIR}"
+  #cd "${WORKING_DIR}"
   sync
 
   unmount_image "${BLOCK_DEVICE_ROOT}" "${ROOT_PARTITION_DIR}"
   unmount_image "${BLOCK_DEVICE_BOOT}" "${BOOT_PARTITION_DIR}"
 
-  if sudo kpartx -l${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" | grep -vq "loop deleted"; then
-    print_info "Deleting device maps from ${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}\n"
-    sudo kpartx -d${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" > "${STDOUT}"
+  if [ ! -z "${LEDE_IMAGE_DECOMPR}"  ]; then
+    if sudo kpartx -l${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" | grep -vq "loop deleted"; then
+      print_info "Deleting device maps from ${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}\n"
+      sudo kpartx -d${KPARTX_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}" > "${STDOUT}"
+    fi
   fi
 }
 
 clean_and_exit() {
-  unmount_images
-  error_exit "$1"
+  if [ -z "${CLEANED}" ]; then
+    unmount_images
+    CLEANED=T
+    error_exit "$1"
+  fi
 }
 
-trap clean_and_exit SIGHUP SIGINT SIGTERM
+trap 'clean_and_exit "ERROR COMMAND: $BASH_COMMAND in line $LINENO"' $TRAP_SIGNALS
 
-cd "${WORKING_DIR}"
+#cd "${WORKING_DIR}"
 mkdir -p "${WORKING_SUB_DIR}"
 
 # debug
@@ -422,9 +439,9 @@ ROOT_UUID=`basename "${ROOT_UUID}" .`
 print_var_name_value_verbose ROOT_UUID
 ROOT_PARTITION_DIR="${MEDIA_USER_DIR}/${ROOT_UUID}"
 
-cd "${BOOT_PARTITION_DIR}"
+#cd "${BOOT_PARTITION_DIR}"
 
-LEDE_KERNEL_VER=`grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" ${LEDE_KERNEL_IMAGE} | head -n1`
+LEDE_KERNEL_VER=`grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" "${BOOT_PARTITION_DIR}"/${LEDE_KERNEL_IMAGE} | head -n1`
 LEDE_KERNEL_VER="${LEDE_KERNEL_VER:14}"
 [ -z "${LEDE_KERNEL_VER}" ] && LEDE_KERNEL_VER="${LEDE_KERNEL_VER_DEFAULT}"
 print_var_name_value_verbose LEDE_KERNEL_VER
@@ -442,11 +459,13 @@ if [ ! -z "$MODULES_LIST" ]; then
     MODULES_PATTERN=${MODULES_PATTERN}${SEPARATOR}'(?<=<a href=")'${MODULE}'_.*?\.ipk(?=">)'
     SEPARATOR="|"
     echo 'opkg install '${MODULES_DESTINATION}'/'${MODULE}'*.ipk' >> "${LEDE_INIT_TMP_FILE}"
+    echo '# rm '${MODULES_DESTINATION}'/'${MODULE}'*.ipk' >> "${LEDE_INIT_TMP_FILE}"
+    echo '# rmdir '${MODULES_DESTINATION} >> "${LEDE_INIT_TMP_FILE}"
   done
   [ "$DEBUG" == "T" ] && print_var_name_value_verbose MODULES_PATTERN
 
   mkdir -p "${MODULES_DOWNLOAD_DIR}"
-  rm "${MODULES_DOWNLOAD_DIR}"/* 2>/dev/null
+  rm -f "${MODULES_DOWNLOAD_DIR}"/* #2>/dev/null
 
   for REPO_ADDR in $(grep -o 'http://.*' "${ROOT_PARTITION_DIR}${LEDE_REPO_COFIG}"); do
     for PACKAGE_NAME in $(wget -${WGET_OPTS}O - "${REPO_ADDR}" | grep -oP "${MODULES_PATTERN}"); do
@@ -478,29 +497,35 @@ if [ ! -z "$INITIAL_SCRIPT_PATH" ]; then
   sudo chmod u+x "${ROOT_PARTITION_DIR}/$INITIAL_SCRIPT_PATH"
 fi
 
+if [ ! -z "$RUN_COMMAND_AFTER_MOUNT" ]; then
+  print_info "Executing user command: ${RUN_COMMAND_AFTER_MOUNT}\n"
+  $RUN_COMMAND_AFTER_MOUNT "${BOOT_PARTITION_DIR}" "${ROOT_PARTITION_DIR}"
+  print_info "User command finished\n"
+fi
+
 [ "$PAUSE_AFTER_MOUNT" == "T" ] && pause "Now you can modify files in boot (${BOOT_PARTITION_DIR}) and root (${ROOT_PARTITION_DIR}) partitions. Press ENTER when done."
 
 if [ -z "$DONT_GENERATE_FILES" ]; then
   mkdir -p "${DESTINATION_DIR}"
-  rm "${DESTINATION_DIR}"/* 2>/dev/null
+  rm -f "${DESTINATION_DIR}"/* #2>/dev/null
 
-  cd "${BOOT_PARTITION_DIR}"
+  #cd "${BOOT_PARTITION_DIR}"
 
-  tar -cpf "${NOOBS_BOOT_IMAGE}" . || clean_and_exit "tar boot image failed"
+  tar -cpf "${NOOBS_BOOT_IMAGE}" -C "${BOOT_PARTITION_DIR}" . || clean_and_exit "tar boot image failed"
   BOOT_TAR_SIZE=`du -m "${NOOBS_BOOT_IMAGE}" | cut -f1` #ls "${NOOBS_BOOT_IMAGE}" -l --block-size=1MB
   print_var_name_value_verbose BOOT_TAR_SIZE
   print_info "xz compressing partition boot..."
   xz -9 -e "${NOOBS_BOOT_IMAGE}"
   print_info "done\n"
 
-  cd "${ROOT_PARTITION_DIR}"
+  #cd "${ROOT_PARTITION_DIR}"
 
-  LEDE_VERSION_ID=$(get_param_from_file ${LEDE_VERSION_FILE} VERSION_ID)
-  LEDE_BUILD_ID=$(get_param_from_file ${LEDE_VERSION_FILE} BUILD_ID)
+  LEDE_VERSION_ID=$(get_param_from_file "${ROOT_PARTITION_DIR}/${LEDE_VERSION_FILE}" VERSION_ID)
+  LEDE_BUILD_ID=$(get_param_from_file "${ROOT_PARTITION_DIR}/${LEDE_VERSION_FILE}" BUILD_ID)
   LEDE_VERSION="${LEDE_VERSION_ID} ${LEDE_BUILD_ID}"
   print_var_name_value_verbose LEDE_VERSION
 
-  sudo tar -cpf "${NOOBS_ROOT_IMAGE}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/* || clean_and_exit "tar root image failed"
+  sudo tar -cpf "${NOOBS_ROOT_IMAGE}" -C "${ROOT_PARTITION_DIR}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/* || clean_and_exit "tar root image failed"
   sudo chown ${USER}:${USER} "${NOOBS_ROOT_IMAGE}"
   ROOT_TAR_SIZE=`du -m "${NOOBS_ROOT_IMAGE}" | cut -f1`
   print_var_name_value_verbose ROOT_TAR_SIZE
@@ -588,7 +613,7 @@ e0b3135868bb0bd0736d0fb153657dcfca21acbc7a7a208097feccbdbbb89c9b7386b0e486e0d452
 EOF
   #####################################################################
 
-  print_info "\nLEDE files for NOOBS are stored in ${DESTINATION_DIR} directory.\nNow you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n"
+  print_info "\nLEDE files for NOOBS are stored in ${DESTINATION_DIR} directory.\nNow you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n\n"
 fi
 
 if [ ! -z "$UPGRADE_PARTITIONS" ]; then
@@ -611,8 +636,10 @@ if [ ! -z "$UPGRADE_PARTITIONS" ]; then
   sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* / |${UPGRADE_RPI_DEV_ROOT}  / |"
   sudo sed "${UPGRADE_DIR_ROOT}/etc/fstab" -i -e "s|^.* /boot |${UPGRADE_RPI_DEV_BOOT}  /boot |"
 
-  print_info "\nLEDE instalation in ${UPGRADE_DIR_BOOT} and ${UPGRADE_DIR_ROOT} upgraded.\nBackup files you can find in directory ${UPGRADE_BACKUP_DIR}\n"
+  print_info "\nLEDE instalation in ${UPGRADE_DIR_BOOT} and ${UPGRADE_DIR_ROOT} upgraded.\nBackup files you can find in directory ${UPGRADE_BACKUP_DIR}\n\n"
 fi
+
+trap - $TRAP_SIGNALS
 
 unmount_images
 
