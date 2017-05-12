@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #defaults
-PROGRAM_VERSION="1.06"
+PROGRAM_VERSION="1.07"
 MEDIA_USER_DIR="/media/${USER}"
 WORKING_DIR="/tmp"
 LEDE_BOOT_PART_SIZE=25
@@ -18,6 +18,7 @@ GZIP_OPTS=""
 STDOUT="/dev/null"
 TRAP_SIGNALS="SIGHUP SIGINT SIGTERM ERR EXIT"
 DELETE_TEMP_FILES="T"
+SCRIPT_DIR=$(dirname $(readlink -f $0))
 
 #test run (no img file downloading/decompress):
 #DEBUG=T ./lede2rpi.sh -m Pi3 -r 17.01.1 -p -q -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot1 -e LEDE_root1 -o LEDE1
@@ -311,6 +312,10 @@ LEDE_VERSION_FILE="usr/lib/os-release"
 LEDE_KERNEL_VER_DEFAULT="4.5"
 LEDE_REPO_COFIG="/etc/opkg/distfeeds.conf"
 UPGRADE_BACKUP_DIR="${WORKING_SUB_DIR}/backup"
+MEDIA_DIR="${SCRIPT_DIR}/bin"
+NOOBS_LOGO_FILE="${MEDIA_DIR}/LEDE.png"
+NOOBS_MARKETING_DIR="${MEDIA_DIR}/marketing"
+NOOBS_MARKETING_NAME="marketing.tar"
 NOOBS_PARTITIONS_CONFIG_FILE="partitions.json"
 NOOBS_OS_CONFIG_FILE="os.json"
 NOOBS_ICON_FILE="${LEDE_OS_NAME}.png"
@@ -403,8 +408,10 @@ trap 'clean_and_exit "ERROR COMMAND: $BASH_COMMAND in line $LINENO"' $TRAP_SIGNA
 #cd "${WORKING_DIR}"
 mkdir -p "${WORKING_SUB_DIR}"
 
+print_info "Downloading LEDE html page..."
 # debug
 [ "$DEBUG" != "T" ] && wget -${WGET_OPTS}O "${WORKING_SUB_DIR}/${LEDE_HTML}" "${LEDE_DOWNLOAD}"
+print_info "done\n"
 
 LEDE_IMAGE_COMPR=`grep -o '"'${LEDE_IMAGE_MASK}'"' "${WORKING_SUB_DIR}/${LEDE_HTML}" | grep -o "${LEDE_IMAGE_MASK}"`
 
@@ -415,11 +422,15 @@ LEDE_RELEASE_DATE=`grep -o '<td class="d">.*</td>' "${WORKING_SUB_DIR}/${LEDE_HT
 LEDE_RELEASE_DATE=`date -d"${LEDE_RELEASE_DATE:14: -5}" +%Y-%m-%d`
 print_var_name_value_verbose LEDE_RELEASE_DATE
 
+print_info "Downloading LEDE image..."
 # debug
 [ "$DEBUG" != "T" ] && wget -${WGET_OPTS}O "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}" "${LEDE_DOWNLOAD}/${LEDE_IMAGE_COMPR}"
+print_info "done\n"
 
+print_info "Decompressing LEDE image..."
 # debug
 [ "$DEBUG" != "T" ] && gzip -d${GZIP_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}"
+print_info "done\n"
 
 LEDE_IMAGE_DECOMPR=`basename "${LEDE_IMAGE_COMPR}" "${LEDE_IMAGE_COMPR_EXT}"`
 
@@ -460,7 +471,7 @@ cat <<EOF > "${LEDE_INIT_TMP_FILE}"
 EOF
 
 if [ ! -z "$MODULES_LIST" ]; then
-  print_info "Downloading modules: $MODULES_LIST into $MODULES_DESTINATION directory on LEDE root partition\n"
+  print_info "Downloading modules: (${MODULES_LIST}) into $MODULES_DESTINATION directory on LEDE root partition\n"
 
   SEPARATOR=""
   MODULES_PATTERN=""
@@ -606,22 +617,13 @@ cat <<EOF > "${DESTINATION_DIR}/${NOOBS_OS_CONFIG_FILE}"
   "feature_level": 0
 }
 EOF
-  ##################################################################### LOGO: xxd -ps -c72 lede_40x40_source.png
+  ##################################################################### LOGO
   print_info "Creating ${NOOBS_ICON_FILE}\n"
-xxd -r -ps <<'EOF' > "${DESTINATION_DIR}/${NOOBS_ICON_FILE}"
-89504e470d0a1a0a0000000d4948445200000028000000280802000000039c2f3a0000028f4944415458c3ed58d1b59b300c75de610131022b9811c8085e01464846801160843042
-18018f108fe03b02ef43c131c6a4f49df6d1d3565f80a57b2559929d9ca6691247c887384822c4c698038801f47d0fe05f4af57fe2bf9cf81bea992589f5317c2788e8bd67ace0be
-07fa6b135648d64a80e187ebf50aa06d5b1fabaa2a1f4e4a59d7b531a6aa2aa796655951144551b05ad3343c94d8a4288acbe522a6a58ce3286561adb5d63290b5d657e08f449465
-5996654a29b672942eacb66da769b2d64a297989a52c4b6b6d94583231a3ac8989e87ebf07561cfde3f198a6a96d5ba6671c260e70a2a91600d65b158cd56118984c2915289465c9
-0ac33070c285104dd3f003ef42b205fd865808d1f73d3f28a5d6c42ee7c61887d3759ddb854de2f74244755d7302b7fcd35a33bd2be9dbede6ea23de4e4244aa3f10292513af7de2
-76d05a73646ec97fde35b94eb39ccf67b711799ef3c73ccf5d4c5aeb344dd334edba8eabda77dae1b0c9bab81661b9f6e05776dc1f08ac4044524abfd394522e256e69d172413bdd
-6e37a26c1cc7e937cb9f753ae190d3e9b0887158aabfe7483eec2270f27fc20030c60098dbf7fdc08e4fd39f2306a0b566c3d9780b8404097abb417be83fdcb403b0acac17d432fd
-e0b3135868bb0bd0736d0fb153657dcfca21acbc7a7a208097feccbdbbb89c9b7386b0e486e0d45274d480f5f10a5dec8939f1ae95c448345f056668120244f150e6ed8440901144
-3d0daeb720a227ee8bd90cc3a0b5664422e16f8a3b854a55ca427ef95ecd3151e0eac6694fc15b24ad3baa3a99d528e802be4dc6db693dde8306037ec89dccfb445bee623dbfb74a
-6ddbb937c4f06c106250e4e8408c87b34e04a26c27b1985bf92b7f806059e67b265730ab7fc1b1b8735c7f0277345a2a632c143f0000000049454e44ae426082
-EOF
+  cp "${NOOBS_LOGO_FILE}" "${DESTINATION_DIR}/${NOOBS_ICON_FILE}"
+  ##################################################################### marketing
+  print_info "Creating ${NOOBS_MARKETING_NAME}\n"
+  tar -cpf "${DESTINATION_DIR}/${NOOBS_MARKETING_NAME}" -C "${NOOBS_MARKETING_DIR}" .
   #####################################################################
-
   print_info "\nLEDE files for NOOBS are stored in ${DESTINATION_DIR} directory.\nNow you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n\n"
 fi
 

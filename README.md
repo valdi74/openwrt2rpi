@@ -149,4 +149,5 @@ sudo apt install kpartx
 ## License
 
 This project is licensed under the GPLv3 License - see the [LICENSE](LICENSE) file for details
+LEDE logo and other gfx are distributed on CC BY-SA 4.0 license (https://creativecommons.org/licenses/by-sa/4.0/)
 
