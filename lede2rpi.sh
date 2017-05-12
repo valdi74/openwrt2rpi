@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #defaults
-PROGRAM_VERSION="1.05"
+PROGRAM_VERSION="1.06"
 MEDIA_USER_DIR="/media/${USER}"
 WORKING_DIR="/tmp"
 LEDE_BOOT_PART_SIZE=25
@@ -14,8 +14,10 @@ PAUSE_AFTER_MOUNT="N"
 RC_LOCAL="/etc/rc.local"
 WGET_OPTS="q"
 KPARTX_OPTS=""
+GZIP_OPTS=""
 STDOUT="/dev/null"
 TRAP_SIGNALS="SIGHUP SIGINT SIGTERM ERR EXIT"
+DELETE_TEMP_FILES="T"
 
 #test run (no img file downloading/decompress):
 #DEBUG=T ./lede2rpi.sh -m Pi3 -r 17.01.1 -p -q -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot1 -e LEDE_root1 -o LEDE1
@@ -126,10 +128,8 @@ get_param_from_file() {
   done < $1
 }
 
-echo "LEDE2RPi version ${PROGRAM_VERSION}"
-
 BAD_PARAMS=N
-while getopts ":m:r:d:a:b:s:i:g:k:l:n:e:o:u:cqvpwh" opt; do
+while getopts ":m:r:d:a:b:s:i:g:k:l:n:e:o:u:cqvpwth" opt; do
   case $opt in
     m) RASPBERRY_MODEL="$OPTARG"
     ;;
@@ -169,6 +169,8 @@ while getopts ":m:r:d:a:b:s:i:g:k:l:n:e:o:u:cqvpwh" opt; do
     ;;
     w) DONT_GENERATE_FILES=T
     ;;
+    t) DELETE_TEMP_FILES=N
+    ;;
     h) HELP=T
     ;;
     \?) echo "Invalid option -$OPTARG" >&2; BAD_PARAMS=T
@@ -188,7 +190,7 @@ OPTIONS:
    RASPBERRY_MODEL=Pi|Pi2|Pi3, mandatory parameter
 
 -r LEDE_RELEASE
-   LEDE_RELEASE=snapshot|17.01.0|17.01.0|future_release_name, mandatory parameter
+   LEDE_RELEASE=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
 
 -d WORKING_DIR
    WORKING_DIR=<working_directory_path>, optional parameter, default=/tmp/
@@ -266,17 +268,23 @@ OPTIONS:
    optional parameter, default=generate NOOBS/PINN files
    Don't generate NOOBS/PINN files in LEDE directory. Useful with -u (only upgrade).
 
+-t
+   optional parameter, default=delete temporary files
+   Don't delete temporary files (LEDE image, ipk, etc.)
+
 -h
    Display help and exit.
 "
   exit
 fi
 
-[ -z "$RASPBERRY_MODEL" ] && echo "Model not specified" && BAD_PARAMS=T
+[ ! "${QUIET}" == "T" ] && echo "LEDE2RPi version ${PROGRAM_VERSION}, RPi model=${RASPBERRY_MODEL}, LEDE release=${LEDE_RELEASE}"
 
-[ -z "$LEDE_RELEASE" ] && echo "LEDE release not specified" && BAD_PARAMS=T
+[ -z "${RASPBERRY_MODEL}" ] && echo "Model not specified" && BAD_PARAMS=T
 
-[ "$BAD_PARAMS" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p] [-v] [-q] [-w] [-a MODULES_LIST] [-b MODULES_DESTINATION] [-s INITIAL_SCRIPT_PATH] [-i INCLUDE_INITIAL_FILE] [-g RUN_COMMAND_AFTER_MOUNT] [-q] [-k LEDE_BOOT_PART_SIZE] [-l LEDE_ROOT_PART_SIZE] [-n BOOT_PART_LABEL] [-e ROOT_PART_LABEL] [-o LEDE_OS_NAME] [-u UPGRADE_PARTITIONS]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
+[ -z "${LEDE_RELEASE}" ] && echo "LEDE release not specified" && BAD_PARAMS=T
+
+[ "${BAD_PARAMS}" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r LEDE_RELEASE|snapshot [-d WORKING_DIR] [-p] [-v] [-q] [-w] [-t] [-a MODULES_LIST] [-b MODULES_DESTINATION] [-s INITIAL_SCRIPT_PATH] [-i INCLUDE_INITIAL_FILE] [-g RUN_COMMAND_AFTER_MOUNT] [-q] [-k LEDE_BOOT_PART_SIZE] [-l LEDE_ROOT_PART_SIZE] [-n BOOT_PART_LABEL] [-e ROOT_PART_LABEL] [-o LEDE_OS_NAME] [-u UPGRADE_PARTITIONS]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
 
 case "${RASPBERRY_MODEL}" in
   "Pi")  LEDE_SUBTARGET="bcm2708"; RASPBERRY_MODELS="\"Pi Model\", \"Pi Compute Module\", \"Pi Zero\""; RASPBERRY_HEX_REVISIONS="2,3,4,5,6,7,8,9,d,e,f,10,11,12,13,14,19,0092" ;;
@@ -313,6 +321,7 @@ NOOBS_PARTITION_SETUP_FILE="partition_setup.sh"
 if [ "$VERBOSE" == "T" ]; then
   WGET_OPTS=""
   KPARTX_OPTS="v"
+  GZIP_OPTS="v"
   STDOUT="/dev/stdout"
   QUIET=N
   print_var_name_value_verbose DESTINATION_DIR
@@ -410,7 +419,7 @@ print_var_name_value_verbose LEDE_RELEASE_DATE
 [ "$DEBUG" != "T" ] && wget -${WGET_OPTS}O "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}" "${LEDE_DOWNLOAD}/${LEDE_IMAGE_COMPR}"
 
 # debug
-[ "$DEBUG" != "T" ] && gzip -dv "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}"
+[ "$DEBUG" != "T" ] && gzip -d${GZIP_OPTS} "${WORKING_SUB_DIR}/${LEDE_IMAGE_COMPR}"
 
 LEDE_IMAGE_DECOMPR=`basename "${LEDE_IMAGE_COMPR}" "${LEDE_IMAGE_COMPR_EXT}"`
 
@@ -459,9 +468,9 @@ if [ ! -z "$MODULES_LIST" ]; then
     MODULES_PATTERN=${MODULES_PATTERN}${SEPARATOR}'(?<=<a href=")'${MODULE}'_.*?\.ipk(?=">)'
     SEPARATOR="|"
     echo 'opkg install '${MODULES_DESTINATION}'/'${MODULE}'*.ipk' >> "${LEDE_INIT_TMP_FILE}"
-    echo '# rm '${MODULES_DESTINATION}'/'${MODULE}'*.ipk' >> "${LEDE_INIT_TMP_FILE}"
-    echo '# rmdir '${MODULES_DESTINATION} >> "${LEDE_INIT_TMP_FILE}"
   done
+  echo '# rm '${MODULES_DESTINATION}'/*.ipk' >> "${LEDE_INIT_TMP_FILE}"
+  echo '# rmdir '${MODULES_DESTINATION} >> "${LEDE_INIT_TMP_FILE}"
   [ "$DEBUG" == "T" ] && print_var_name_value_verbose MODULES_PATTERN
 
   mkdir -p "${MODULES_DOWNLOAD_DIR}"
@@ -642,4 +651,15 @@ fi
 trap - $TRAP_SIGNALS
 
 unmount_images
+
+if [ "$DELETE_TEMP_FILES" == "T" ]; then
+  print_info "Removing temporary files from ${WORKING_SUB_DIR}\n"
+  rm "${WORKING_SUB_DIR}/${LEDE_IMAGE_DECOMPR}"
+  rm "${WORKING_SUB_DIR}/${LEDE_HTML}"
+  if [ ! -z "$MODULES_LIST" ]; then
+    rm -f "${MODULES_DOWNLOAD_DIR}"/* #2>/dev/null
+    rmdir "${MODULES_DOWNLOAD_DIR}"
+  fi
+  rm "${LEDE_INIT_TMP_FILE}"
+fi
 

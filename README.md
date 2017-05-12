@@ -29,7 +29,7 @@ OPTIONS:
    RASPBERRY_MODEL=Pi|Pi2|Pi3, mandatory parameter
 
 -r LEDE_RELEASE
-   LEDE_RELEASE=snapshot|17.01.0|17.01.0|future_release_name, mandatory parameter
+   LEDE_RELEASE=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
 
 -d WORKING_DIR
    WORKING_DIR=<working_directory_path>, optional parameter, default=/tmp/
@@ -106,6 +106,10 @@ OPTIONS:
 -w
    optional parameter, default=generate NOOBS/PINN files
    Don't generate NOOBS/PINN files in LEDE directory. Useful with -u (only upgrade).
+
+-t
+   optional parameter, default=delete temporary files
+   Don't delete temporary files (LEDE image, ipk, etc.)
 
 -h
    Display help and exit.
