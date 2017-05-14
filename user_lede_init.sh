@@ -1,6 +1,6 @@
 
 LAN_IP="192.168.44.1"
-SHUTDOWN_BUTTON_SCRIPT="/root/shutown_button.sh"
+SHUTDOWN_BUTTON_SCRIPT="/root/shutdown_button.sh"
 
 uci set system.@system[0].timezone=CET-1CEST,M3.5.0,M10.5.0/3
 uci commit system

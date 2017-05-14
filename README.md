@@ -1,5 +1,5 @@
 # lede2rpi
-Linux shell script for downloading and converting LEDE image to Raspberry Pi NOOBS/PINN installer format.
+Linux shell script for downloading and converting LEDE image to Raspberry Pi NOOBS or PINN installer format.
 
 Script generates files:
 - [BOOT_PART_LABEL].tar.xz
@@ -8,6 +8,7 @@ Script generates files:
 - partitions.json
 - os.json
 - [LEDE_OS_NAME].png
+- marketing.tar
 
 in directory [WORKING_DIR]/lede2R[RASPBERRY_MODEL]_[LEDE_RELEASE]/LEDE
 
@@ -17,7 +18,7 @@ Directory LEDE can be copied to SD card into /os folder for NOOBS/PINN installer
 
 Optionally script downloads selected modules to root partition and creates initial configuration script.
 
-Tested on Ubuntu 16.04 with Raspberry Pi 3 and NOOBS 2.4.0 / PINN 2.3.1a BETA
+Tested on Ubuntu 16.04 with Raspberry Pi 3 and NOOBS 2.4.0 / PINN 2.3.1a BETA and LEDE 17.01.1/snapshot
 
 ## Usage
 ```
