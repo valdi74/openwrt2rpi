@@ -10,15 +10,18 @@ Script generates files:
 - [LEDE_OS_NAME].png
 - marketing.tar
 
-in directory [WORKING_DIR]/lede2R[RASPBERRY_MODEL]_[LEDE_RELEASE]/LEDE
+in directory [WORKING_DIR]/lede2R[RASPBERRY_MODEL]_[LEDE_RELEASE]/lede2R[RASPBERRY_MODEL]
 
-for example: lede2RPi3_snapshot/LEDE for Pi3 snapshot
+for example: lede2RPi3_snapshot/lede2RPi3 for Pi3 snapshot
 
-Directory LEDE can be copied to SD card into /os folder for NOOBS/PINN installer.
+Directory lede2R[RASPBERRY_MODEL] can be copied to SD card into /os folder for NOOBS/PINN installer.
 
 Optionally script downloads selected modules to root partition and creates initial configuration script.
+It's useful when Pi don't have internet connection after install (only USB modem for example).
 
 Tested on Ubuntu 16.04 with Raspberry Pi 3 and NOOBS 2.4.0 / PINN 2.3.1a BETA and LEDE 17.01.1/snapshot
+
+Script uses sudo and will ask for admin password to mount and modify system files to LEDE partitions.
 
 ## Usage
 ```
@@ -26,75 +29,75 @@ $ lede2rpi.sh -m RASPBERRY_MODEL -r LEDE_RELEASE [OPTIONS]
 
 OPTIONS:
 
--m RASPBERRY_MODEL
-   RASPBERRY_MODEL=Pi|Pi2|Pi3, mandatory parameter
+-m raspberry_model
+   raspberry_model=Pi|Pi2|Pi3, mandatory parameter
 
--r LEDE_RELEASE
-   LEDE_RELEASE=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
+-r lede_release
+   lede_release=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
 
--d WORKING_DIR
-   WORKING_DIR=<working_directory_path>, optional parameter, default=/tmp/
+-d working_dir
+   working_dir=<working_directory_path>, optional parameter, default=/tmp/
    Directory to store temporary and final files.
 
 -p
    optional parameter
    Pause after boot and root partitions mount. You can add/modify files on both partitions in /media/$USER/[MOUNT_NAME] directories.
 
--a MODULES_LIST
-   MODULES_LIST='module1 module2 ...', optional parameter
-   List of modules to download and copy to root image into MODULES_DESTINATION directory
+-a modules_list
+   modules_list='module1 module2 ...', optional parameter
+   List of modules to download and copy to root image into modules_destination directory
 
--b MODULES_DESTINATION
-   MODULES_DESTINATION=<ipk_directory_path>, optional parameter, default=/root/ipk/
-   Directory on LEDE root partition to copy downloaded modules from MODULES_LIST
+-b modules_destination
+   modules_destination=<ipk_directory_path>, optional parameter, default=/root/ipk/
+   Directory on LEDE root partition to copy downloaded modules from modules_list
 
--s INITIAL_SCRIPT_PATH
-   INITIAL_SCRIPT_PATH=<initial_script_path>, optional parameter, default=none
+-s initial_script_path
+   initial_script_path=<initial_script_path>, optional parameter, default=none
    Path to store initial configuration script on LEDE root partition. Example: /root/init_config.sh
 
--i INCLUDE_INITIAL_FILE
-   MODULES_LIST=<include_initial_script_path>, optional parameter
-   Path to local script, to be included in initial configuration script INITIAL_SCRIPT_PATH.
+-i include_initial_file
+   modules_list=<include_initial_script_path>, optional parameter
+   Path to local script, to be included in initial configuration script initial_script_path.
 
--g RUN_COMMAND_AFTER_MOUNT
-   RUN_COMMAND_AFTER_MOUNT=<command_to_run>, optional parameter
+-g run_command_after_mount
+   run_command_after_mount=<command_to_run>, optional parameter
    Command to run after boot and root partitions mount.
    The command will receive two parameters: boot and root partitions mount directory.
 
 -c
    optional parameter, default=no autorun initial script
-   Run initial script INITIAL_SCRIPT_PATH once. Path to initial script will be added do /etc/rc.local and removed after first run.
+   Run initial script initial_script_path once. Path to initial script will be added do /etc/rc.local and removed after first run.
 
--k LEDE_BOOT_PART_SIZE
-   LEDE_BOOT_PART_SIZE=<boot_partition_size_in_mb>, optional parameter, default=25
+-k lede_boot_part_size
+   lede_boot_part_size=<boot_partition_size_in_mb>, optional parameter, default=25
    LEDE boot partition size in MB.
 
--l LEDE_ROOT_PART_SIZE
-   LEDE_ROOT_PART_SIZE=<root_partition_size_in_mb>, optional parameter, default=300
+-l lede_root_part_size
+   lede_root_part_size=<root_partition_size_in_mb>, optional parameter, default=300
    LEDE root partition size in MB.
 
--n BOOT_PART_LABEL
-   BOOT_PART_LABEL=<boot_partition_label>, optional parameter, default=LEDE_boot
+-n boot_part_label
+   boot_part_label=<boot_partition_label>, optional parameter, default=LEDE_boot
    LEDE boot partition label.
 
--e ROOT_PART_LABEL
-   ROOT_PART_LABEL=<root_partition_label>, optional parameter, default=LEDE_root
+-e root_part_label
+   root_part_label=<root_partition_label>, optional parameter, default=LEDE_root
    LEDE root partition label.
 
--o LEDE_OS_NAME
-   LEDE_OS_NAME=<lede_os_name>, optional parameter, default=LEDE
+-o lede_os_name
+   lede_os_name=<lede_os_name>, optional parameter, default=LEDE
    LEDE os name in os.json
 
 -q
    optional parameter, default=no quiet
-   Quiet mode.
+   quiet mode.
 
 -v
    optional parameter, default=no verbose
-   Verbose mode.
+   verbose mode.
 
--u UPGRADE_PARTITIONS
-   UPGRADE_PARTITIONS='BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>', optional parameter
+-u upgrade_partitions
+   upgrade_partitions='BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>', optional parameter
    Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
    WARNING: all files from <local_boot_dir> and <local_root_dir> will be DELETED.
    example: -u BOOT=/dev/mmcblk0p6:/media/$USER/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/$USER/LEDE_root
@@ -111,6 +114,16 @@ OPTIONS:
 -t
    optional parameter, default=delete temporary files
    Don't delete temporary files (LEDE image, ipk, etc.)
+
+-j os_list_binaries_url
+   optional parameter, default=<empty> -> don't generate 
+   Create (append mode) os_list_lede.json for NOOBS/PINN on-line installation.
+   File will be created in <working_dir> directory.
+   Destination URL=<os_list_binaries_url><raspberry_model>/[os_setup_filename], exmaple:
+   - os_list_binaries_url="http://downloads.sourceforge.net/project/pinn/os/lede2R"
+   - raspberry_model="Pi2"
+   Result URL for "os_info":
+   "http://downloads.sourceforge.net/project/pinn/os/lede2RPi2/os.json"
 
 -h
    Display help and exit.
