@@ -77,7 +77,7 @@ print_var_name_value_verbose() {
 
 print_info() {
   if [ ! "${quiet}" == "T" ]; then
-    colored_echo "$1" green
+    colored_echo "$1" ${2:-"green"}
   fi
 }
 
@@ -282,7 +282,7 @@ OPTIONS:
    Destination URL=<os_list_binaries_url><raspberry_model>/[os_setup_filename], exmaple:
    - os_list_binaries_url="http://downloads.sourceforge.net/project/pinn/os/lede2R"
    - raspberry_model="Pi2"
-   Result URL for "os_info":
+   Result URL for item "os_info":
    "http://downloads.sourceforge.net/project/pinn/os/lede2RPi2/os.json"
 
 -h
@@ -411,6 +411,7 @@ unmount_images() {
 
 clean_and_exit() {
   if [ -z "${cleaned}" ]; then
+    print_info "Cleaning\n"
     unmount_images
     cleaned=T
     error_exit "$1"
@@ -501,13 +502,19 @@ if [ ! -z "$modules_list" ]; then
   mkdir -p "${modules_download_dir}"
   rm -f "${modules_download_dir}"/* #2>/dev/null
 
+  modules_downloaded=0
   for repo_addr in $(grep -o 'http://.*' "${root_partition_dir}${lede_repo_cofig}"); do
     for package_name in $(wget -${wget_opts}O - "${repo_addr}" | grep -oP "${modules_pattern}"); do
-      [ "$verbose" == "T" ] && print_info "Downloading ${repo_addr}/${package_name}\n"
+      print_info "Downloading ${package_name}..."
       wget -${wget_opts}P "${modules_download_dir}" "${repo_addr}/${package_name}"
+      print_info "done\n"
+      modules_downloaded=$((modules_downloaded+1))
     done
   done
   sudo cp -R "${modules_download_dir}/." "${root_partition_dir}/${modules_destination}"
+  modules_count=`wc -w <<<"$modules_list"`
+  [ "${modules_downloaded}" -ne "${modules_count}" ] && print_color="red" || print_color=""
+  print_info "Modules downloaded/all: ${modules_downloaded}/${modules_count}\n" "${print_color}"
 fi
 
 if [ ! -z "${run_initial_script_once}" ]; then
@@ -642,6 +649,7 @@ EOF
 
   if [ ! -z "$os_list_binaries_url" ]; then
     print_info "Appending new os to ${os_list_lede_file} file\n"
+    os_list_binaries_url_model="${os_list_binaries_url}${raspberry_model}"
 
     cat <<EOF >> "${os_list_lede_file}"
         {
@@ -653,14 +661,14 @@ EOF
             "supported_models": [
               ${raspberry_models}
             ],
-            "os_info":         "${os_list_binaries_url}${raspberry_model}/${noobs_os_config_file}",
-            "partitions_info": "${os_list_binaries_url}${raspberry_model}/${noobs_partitions_config_file}",
-            "icon":            "${os_list_binaries_url}${raspberry_model}/${noobs_icon_file}",
-            "marketing_info":  "${os_list_binaries_url}${raspberry_model}/${noobs_marketing_name}",
-            "partition_setup": "${os_list_binaries_url}${raspberry_model}/${noobs_partition_setup_file}",
+            "os_info":         "${os_list_binaries_url_model}/${noobs_os_config_file}",
+            "partitions_info": "${os_list_binaries_url_model}/${noobs_partitions_config_file}",
+            "icon":            "${os_list_binaries_url_model}/${noobs_icon_file}",
+            "marketing_info":  "${os_list_binaries_url_model}/${noobs_marketing_name}",
+            "partition_setup": "${os_list_binaries_url_model}/${noobs_partition_setup_file}",
             "tarballs": [
-                               "${os_list_binaries_url}${raspberry_model}/${boot_part_label}.tar.xz",
-                               "${os_list_binaries_url}${raspberry_model}/${root_part_label}.tar.xz"
+                               "${os_list_binaries_url_model}/${boot_part_label}.tar.xz",
+                               "${os_list_binaries_url_model}/${root_part_label}.tar.xz"
             ],
             "nominal_size": 325
         }

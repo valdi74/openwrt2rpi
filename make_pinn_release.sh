@@ -26,7 +26,7 @@ modules_to_add="m_modem_ras_ppp m_modem_ras_acm m_modem_ncm m_modem_huawei_ncm m
 # Android tethering: (kmod-usb-net kmod-usb-net-cdc-ether) kmod-usb-net-rndis
 #  iPhone tethering: (kmod-usb-net) kmod-usb-net-ipheth (libxml2 libplist zlib libusbmuxd libopenssl libimobiledevice) usbmuxd
 
-# formal definitions
+# modules set definitions
 m_modem_base="kmod-usb2 librt libusb-1.0 usb-modeswitch"
 m_modem_ras_ppp="chat comgt kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option"
 m_modem_ras_acm="chat comgt kmod-usb-acm"
