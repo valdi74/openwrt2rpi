@@ -1,4 +1,4 @@
-# lede2rpi
+# lede2rpi #
 Linux shell script for downloading and converting LEDE image to Raspberry Pi NOOBS or PINN installer format.
 
 Script generates files:
@@ -19,11 +19,11 @@ Directory lede2R[RASPBERRY_MODEL] can be copied to SD card into /os folder for N
 Optionally script downloads selected modules to root partition and creates initial configuration script.
 It's useful when Pi don't have internet connection after install (only USB modem for example).
 
-Tested on Ubuntu 16.04 with Raspberry Pi 3 and NOOBS 2.4.0 / PINN 2.3.1a BETA and LEDE 17.01.1/snapshot
+Tested on Ubuntu 16.04 with Raspberry Pi 3 and NOOBS 2.4.0 / PINN 2.4.2 and LEDE 17.01.1/snapshot
 
 Script uses sudo and will ask for admin password to mount and modify system files to LEDE partitions.
 
-## Usage
+## Usage ##
 ```
 $ lede2rpi.sh -m RASPBERRY_MODEL -r LEDE_RELEASE [OPTIONS]
 
@@ -129,7 +129,7 @@ OPTIONS:
    Display help and exit.
 ```
 
-### Examples
+### Examples ###
 
 Download LEDE release 17.01.1 for RPi 3 and convert to NOOBS with default parameters:
 ```
@@ -153,14 +153,68 @@ $ lede2rpi.sh -m Pi3 -r 17.01.1 -d ~/tmp/ -v -p -c -s /root/init_config.sh -i ./
 
 Sample local init file user_lede_init.sh sets local IP address, timezone (Warsaw), enables WPA2 secured Wifi AP, sets USB HiLink modem as wan interface and makes simple script for shutdown button on GPIO 22. Finally waits 10 sec and reboots RPi.
 
-## Requirements
+## Requirements ##
 ```
 sudo apt install kpartx
 ```
-## To do / roadmap
+## To do / roadmap ##
 - waiting for sugestions
 
-## License
+# make_pinn_release #
+Linux shell script for creating complete PINN installation of LEDE for Raspberry Pi models 1, 2 & 3 with pre-downloaded modules (in /root/ipk).
+
+Generates files:
+- lede2RPi_[lede_release].tar
+- lede2RPi2_[lede_release].tar
+- lede2RPi3_[lede_release].tar
+- os_list_lede.json
+
+It uses lede2rpi.sh to generate single Pi image.
+
+## Usage ##
+```
+$ make_pinn_release.sh LEDE_release [list_of_module_sets] [os_list_binaries_url]
+
+OPTIONS:
+
+LEDE_release=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
+
+list_of_module_sets="m_set1 m_set2 ..."
+    List of predefined module sets, to be downloaded offline.
+    Module sets:
+      - m_modem_base - base modules for USB modems
+      - m_modem_ras_ppp - RAS (ppp) USB modems
+      - m_modem_ras_acm - RAS (ACM) USB modems
+      - m_modem_ncm - NCM USB modems
+      - m_modem_huawei_ncm - Huawei NCM USB modems
+      - m_modem_qmi - QMI USB modems
+      - m_modem_hilink - HiLink USB modems
+      - m_modem_hostless - hostlessUSB modems
+      - m_modem_directip - DirectIP USB modems
+      - m_modem_mbim - MBIM USB modems
+      - m_modem_HSO - HSO USB modems
+      - m_modem_android_tether - Android tethering USB modem
+      - m_modem_iphone_tether - iPhone tethering USB modem
+      - m_modem_all - all above modem modules
+      - m_nano - nano editor
+      - m_crelay - crelay USB power switch
+      - m_wget - full wget
+      - m_adblock - LEDE adblock module (includes full wget)
+      - m_all - all above modules
+      - m_none - no modules download
+
+os_list_binaries_url
+    URL to os binaries to set in os_list_lede.json file.
+```
+
+### Example ###
+
+Create LEDE complete release 17.01.1 with pre-downloaded modules for HiLink modem, nano and crelay:
+```
+$ make_pinn_release.sh 17.01.1 "m_modem_hilink m_nano m_crelay"
+```
+
+## License ##
 
 This project is licensed under the GPLv3 License - see the [LICENSE](LICENSE) file for details
 

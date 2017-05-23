@@ -1,12 +1,10 @@
 #!/bin/bash
 
-# make_pinn_release.sh 17.01.1 "http://downloads.sourceforge.net/project/pinn/os/lede2R"
+# make_pinn_release.sh 17.01.1 "m_modem_hilink m_modem_android_tether m_nano m_wget m_crelay" "http://downloads.sourceforge.net/project/pinn/os/lede2R"
 
 working_dir="/tmp"
 os_list_lede_file="${working_dir}/os_list_lede.json"
-
-# exmaple: hilink modems, nano and crelay
-# modules_to_add="m_modem_base m_modem_hilink m_nano m_crelay"
+script_dir=$(dirname $(readlink -f $0))
 
 # USB modems and modules needed
 #        BASE (all): (kmod-usb-core) kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch
@@ -25,30 +23,41 @@ os_list_lede_file="${working_dir}/os_list_lede.json"
 
 # modules set definitions
 m_modem_base="kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch"
-m_modem_ras_ppp="chat comgt kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option"
-m_modem_ras_acm="chat comgt kmod-usb-acm"
-m_modem_ncm="chat wwan comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option kmod-usb-wdm kmod-usb-net-huawei-cdc-ncm"
-m_modem_huawei_ncm="chat wwan comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-wdm kmod-usb-net-huawei-cdc-ncm"
-m_modem_qmi="kmod-usb-net kmod-usb-wdm kmod-usb-net-qmi-wwan libubox libjson-c libblobmsg-json wwan uqmi"
-m_modem_hilink="kmod-mii kmod-usb-net kmod-usb-net-cdc-ether"
-m_modem_hostless="kmod-mii kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-net-rndis"
-m_modem_mbim="kmod-usb-net kmod-usb-wdm kmod-usb-net-cdc-ncm kmod-usb-net-cdc-mbim wwan umbim"
-m_modem_HSO="comgt kmod-usb-net kmod-usb-net-hso"
-m_modem_android_tether="kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-net-rndis"
-m_modem_iphone_tether="kmod-usb-net kmod-usb-net-ipheth libxml2 libplist zlib libusbmuxd libopenssl libimobiledevice usbmuxd"
+m_modem_ras_ppp="${m_modem_base} chat comgt kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option"
+m_modem_ras_acm="${m_modem_base} chat comgt kmod-usb-acm"
+m_modem_ncm="${m_modem_base} chat wwan comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option kmod-usb-wdm kmod-usb-net-huawei-cdc-ncm"
+m_modem_huawei_ncm="${m_modem_base} chat wwan comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-wdm kmod-usb-net-huawei-cdc-ncm"
+m_modem_qmi="${m_modem_base} kmod-usb-net kmod-usb-wdm kmod-usb-net-qmi-wwan libubox libjson-c libblobmsg-json wwan uqmi"
+m_modem_hilink="${m_modem_base} kmod-mii kmod-usb-net kmod-usb-net-cdc-ether"
+m_modem_hostless="${m_modem_base} kmod-mii kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-net-rndis"
+m_modem_directip="${m_modem_base} kmod-usb-net-sierrawireless comgt-directip"
+m_modem_mbim="${m_modem_base} kmod-usb-net kmod-usb-wdm kmod-usb-net-cdc-ncm kmod-usb-net-cdc-mbim wwan umbim"
+m_modem_HSO="${m_modem_base} comgt kmod-usb-net kmod-usb-net-hso"
+m_modem_android_tether="${m_modem_base} kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-net-rndis"
+m_modem_iphone_tether="${m_modem_base} kmod-usb-net kmod-usb-net-ipheth libxml2 libplist zlib libusbmuxd libopenssl libimobiledevice usbmuxd"
+m_modem_all="${m_modem_ras_ppp} ${m_modem_ras_acm} ${m_modem_ncm} ${m_modem_huawei_ncm} ${m_modem_qmi} ${m_modem_hilink} ${m_modem_hostless} ${m_modem_directip} ${m_modem_mbim} ${m_modem_HSO} ${m_modem_android_tether} ${m_modem_iphone_tether}"
 # other modules
 m_nano="terminfo libncurses nano"
 m_crelay="libusb-1.0 libftdi1 hidapi crelay"
+m_wget="libpcre zlib libopenssl wget"
+m_adblock="${m_wget} adblock"
+m_all="${m_modem_all} m_nano m_crelay m_wget m_adblock"
 
 #modules_list="kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano libftdi1 hidapi crelay"
 
-add_modules() {
+add_module() {
+  local module_to_add
   local found
+  local new_mod
 
-  if [ -z "${modules_list}" ]; then
-    modules_list="${1}"
+  new_mod="${1}"
+
+  if [ "${new_mod:0:2}" == "m_" ]; then
+    add_modules "${!new_mod}"
   else
-    for new_mod in ${1}; do
+    if [ -z "${modules_list}" ]; then
+      modules_list="${new_mod}"
+    else
       found=N
       for old_mod in ${modules_list}; do
         if [ "${old_mod}" == "${new_mod}" ]; then
@@ -57,14 +66,15 @@ add_modules() {
         fi
       done
       [ "${found}" == "N" ] && modules_list="${modules_list} ${new_mod}"
-    done
+    fi
   fi
 }
 
-add_all_modules() {
-  modules_list=""
-  for list in ${modules_to_add}; do
-    add_modules "${!list}"
+add_modules() {
+ local new_mod
+
+  for new_mod in ${1}; do
+    add_module "${new_mod}"
   done
 }
 
@@ -72,7 +82,7 @@ run_lede2rpi() {
   local raspberry_model="$1"
 
   echo "Creating files for model ${raspberry_model}"
-  ./lede2rpi.sh\
+  ${script_dir}/lede2rpi.sh\
   -m "${raspberry_model}"\
   -r "${lede_release}"\
   -s "/root/init_config.sh"\
@@ -85,23 +95,27 @@ run_lede2rpi() {
 
 if [ -z "$1" ]; then
   echo "  USAGE: $0 LEDE_release [list_of_module_sets] [os_list_binaries_url]"
-  echo "Example: $0 17.01.1 \"m_modem_base m_modem_hilink m_nano m_crelay\""
+  echo "Example: $0 17.01.1 \"m_modem_base m_modem_hilink m_modem_android_tether m_nano m_wget m_crelay\""
   exit 1
 fi
 
 lede_release=$1
 
 # default = add all defined modules
-modules_to_add=${2:-"m_modem_ras_ppp m_modem_ras_acm m_modem_ncm m_modem_huawei_ncm m_modem_qmi m_modem_hilink m_modem_hostless m_modem_mbim m_modem_HSO m_modem_android_tether m_modem_iphone_tether m_nano m_crelay"}
+modules_to_add=${2:-"${m_none}"}
 
 # default = user procount github url
 os_list_binaries_url=${3:-"https://raw.githubusercontent.com/procount/pinn-os/master/os/lede2R"}
 
-add_all_modules
+modules_list=""
+add_modules "${modules_to_add}"
 
-echo "Creating LEDE release ${lede_release} files for PINN (os_list_binaries_url=${os_list_binaries_url})"
-echo "Modules to download to SD card: '${modules_list}'"
-
+echo "Creating LEDE release '${lede_release}' files for PINN"
+echo "os_list_binaries_url = ${os_list_binaries_url}"
+#echo "Meta modules list: '${modules_to_add}'"
+echo "Modules to download to SD card:"
+echo "${modules_list}"
+exit
 cat <<'EOF' > "${os_list_lede_file}"
 {
     "os_list": [
