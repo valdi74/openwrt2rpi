@@ -8,11 +8,8 @@ os_list_lede_file="${working_dir}/os_list_lede.json"
 # exmaple: hilink modems, nano and crelay
 # modules_to_add="m_modem_base m_modem_hilink m_nano m_crelay"
 
-# add all defined modules
-modules_to_add="m_modem_ras_ppp m_modem_ras_acm m_modem_ncm m_modem_huawei_ncm m_modem_qmi m_modem_hilink m_modem_hostless m_modem_mbim m_modem_HSO m_modem_android_tether m_modem_iphone_tether m_nano m_crelay"
-
 # USB modems and modules needed
-#        BASE (all): (kmod-usb-core) kmod-usb2 librt libusb-1.0 usb-modeswitch
+#        BASE (all): (kmod-usb-core) kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch
 #         RAS (ppp): chat comgt kmod-usb-serial (kmod-usb-serial-wwan) kmod-usb-serial-option
 #         RAS (ACM): chat comgt kmod-usb-acm
 #               NCM: chat (wwan) comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-serial (kmod-usb-serial-wwan) kmod-usb-serial-option (kmod-usb-wdm) kmod-usb-net-huawei-cdc-ncm
@@ -27,7 +24,7 @@ modules_to_add="m_modem_ras_ppp m_modem_ras_acm m_modem_ncm m_modem_huawei_ncm m
 #  iPhone tethering: (kmod-usb-net) kmod-usb-net-ipheth (libxml2 libplist zlib libusbmuxd libopenssl libimobiledevice) usbmuxd
 
 # modules set definitions
-m_modem_base="kmod-usb2 librt libusb-1.0 usb-modeswitch"
+m_modem_base="kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch"
 m_modem_ras_ppp="chat comgt kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option"
 m_modem_ras_acm="chat comgt kmod-usb-acm"
 m_modem_ncm="chat wwan comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option kmod-usb-wdm kmod-usb-net-huawei-cdc-ncm"
@@ -43,7 +40,7 @@ m_modem_iphone_tether="kmod-usb-net kmod-usb-net-ipheth libxml2 libplist zlib li
 m_nano="terminfo libncurses nano"
 m_crelay="libusb-1.0 libftdi1 hidapi crelay"
 
-#modules_list="kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano libftdi1 hidapi crelay"
+#modules_list="kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano libftdi1 hidapi crelay"
 
 add_modules() {
   local found
@@ -87,12 +84,18 @@ run_lede2rpi() {
 }
 
 if [ -z "$1" ]; then
-  echo "USAGE: $0 LEDE_release [os_list_binaries_url]"
+  echo "  USAGE: $0 LEDE_release [list_of_module_sets] [os_list_binaries_url]"
+  echo "Example: $0 17.01.1 \"m_modem_base m_modem_hilink m_nano m_crelay\""
   exit 1
 fi
 
 lede_release=$1
-os_list_binaries_url=${2:-"http://downloads.sourceforge.net/project/pinn/os/lede2R"}
+
+# default = add all defined modules
+modules_to_add=${2:-"m_modem_ras_ppp m_modem_ras_acm m_modem_ncm m_modem_huawei_ncm m_modem_qmi m_modem_hilink m_modem_hostless m_modem_mbim m_modem_HSO m_modem_android_tether m_modem_iphone_tether m_nano m_crelay"}
+
+# default = user procount github url
+os_list_binaries_url=${3:-"https://raw.githubusercontent.com/procount/pinn-os/master/os/lede2R"}
 
 add_all_modules
 
