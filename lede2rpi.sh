@@ -310,8 +310,7 @@ esac
 lede_download="https://downloads.lede-project.org/${lede_download_dir}/targets/brcm2708/${lede_subtarget}"
 lede_image_compr_ext=".gz"
 lede_image_mask="lede.*${lede_subtarget}.*\.img\\${lede_image_compr_ext}"
-block_device_boot="/dev/dm-0"
-block_device_root="/dev/dm-1"
+block_device_prefix="/dev/dm-"
 raspberry_model_dir="lede2R${raspberry_model}"
 working_sub_dir="${working_dir}/${raspberry_model_dir}_${lede_release}"
 destination_dir="${working_sub_dir}/${raspberry_model_dir}"
@@ -457,6 +456,16 @@ if [ "$verbose" == "T" ]; then
   print_var_name_value_verbose lede_boot_part_size
   print_var_name_value_verbose lede_root_part_size
 fi
+
+for i in $(seq 1 20); do
+  if [ ! -e "{block_device_prefix}${i}" ]; then
+    block_device_boot="/dev/dm-$((i))"
+    block_device_root="/dev/dm-$((++i))"
+    break;
+  fi
+done
+
+[ -z "${block_device_boot}" ] && error_exit "Can't evaluate block_device_boot"
 
 print_info "Create device maps from ${working_sub_dir}/${lede_image_decompr}\n"
 sudo kpartx -sa${kpartx_opts} "${working_sub_dir}/${lede_image_decompr}"

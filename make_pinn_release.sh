@@ -115,7 +115,7 @@ echo "os_list_binaries_url = ${os_list_binaries_url}"
 #echo "Meta modules list: '${modules_to_add}'"
 echo "Modules to download to SD card:"
 echo "${modules_list}"
-exit
+
 cat <<'EOF' > "${os_list_lede_file}"
 {
     "os_list": [
