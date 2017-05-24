@@ -36,7 +36,7 @@ OPTIONS:
    lede_release=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
 
 -d working_dir
-   working_dir=<working_directory_path>, optional parameter, default=/tmp/
+   working_dir=<working_directory_path>, optional parameter, default=/tmp
    Directory to store temporary and final files.
 
 -p
@@ -45,10 +45,31 @@ OPTIONS:
 
 -a modules_list
    modules_list='module1 module2 ...', optional parameter
-   List of modules to download and copy to root image into modules_destination directory
+   List of modules/modules sets to download and copy to root image into modules_destination directory.
+   Currently available module sets:
+    - m_modem_base - base modules for USB modems
+    - m_modem_ras_ppp - RAS (ppp) USB modems
+    - m_modem_ras_acm - RAS (ACM) USB modems
+    - m_modem_ncm - NCM USB modems
+    - m_modem_huawei_ncm - Huawei NCM USB modems
+    - m_modem_qmi - QMI USB modems
+    - m_modem_hilink - HiLink USB modems
+    - m_modem_hostless - hostlessUSB modems
+    - m_modem_directip - DirectIP USB modems
+    - m_modem_mbim - MBIM USB modems
+    - m_modem_HSO - HSO USB modems
+    - m_modem_android_tether - Android tethering USB modem
+    - m_modem_iphone_tether - iPhone tethering USB modem
+    - m_modem_all - all above modem modules
+    - m_nano - nano editor
+    - m_crelay - crelay USB power switch
+    - m_wget - full wget
+    - m_adblock - LEDE adblock module (includes full wget)
+    - m_all - all above modules
+    - m_none - no modules download
 
 -b modules_destination
-   modules_destination=<ipk_directory_path>, optional parameter, default=/root/ipk/
+   modules_destination=<ipk_directory_path>, optional parameter, default=/root/ipk
    Directory on LEDE root partition to copy downloaded modules from modules_list
 
 -s initial_script_path
@@ -129,6 +150,7 @@ OPTIONS:
    Display help and exit.
 ```
 
+
 ### Examples ###
 
 Download LEDE release 17.01.1 for RPi 3 and convert to NOOBS with default parameters:
@@ -148,7 +170,7 @@ $ lede2rpi.sh -m Pi -r snapshot -q
 
 Download LEDE release 17.01.1 for Raspberry Pi 3, be verbose, use working dir ~/tmp/, create initial config script in /root/init_config.sh and run it once (through rc.local), include local init script ~/tmp/my_lede_init.sh, download modules for HiLink modem, nano and USB relay to /root/ipk directory and pause befor making final files. Boot partition will have a size of 30 MB and the root partition will have a size of 400 MB. Final files will be created in the directory ~/tmp/lede2RPi3_17.01.1/LEDE.
 ```
-$ lede2rpi.sh -m Pi3 -r 17.01.1 -d ~/tmp/ -v -p -c -s /root/init_config.sh -i ./user_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0 usb-modeswitch kmod-mii kmod-usb-net kmod-usb-net-cdc-ether terminfo libncurses nano libftdi1 hidapi crelay" -k 30 -l 400
+$ lede2rpi.sh -m Pi3 -r 17.01.1 -d ~/tmp/ -v -p -c -s /root/init_config.sh -i ./user_lede_init.sh -b /root/ipk -a "m_modem_hilink m_nano m_crelay" -k 30 -l 400
 ```
 
 Sample local init file user_lede_init.sh sets local IP address, timezone (Warsaw), enables WPA2 secured Wifi AP, sets USB HiLink modem as wan interface and makes simple script for shutdown button on GPIO 22. Finally waits 10 sec and reboots RPi.
@@ -180,28 +202,7 @@ OPTIONS:
 LEDE_release=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
 
 list_of_module_sets="m_set1 m_set2 ..."
-    List of predefined module sets, to be downloaded offline.
-    Module sets:
-      - m_modem_base - base modules for USB modems
-      - m_modem_ras_ppp - RAS (ppp) USB modems
-      - m_modem_ras_acm - RAS (ACM) USB modems
-      - m_modem_ncm - NCM USB modems
-      - m_modem_huawei_ncm - Huawei NCM USB modems
-      - m_modem_qmi - QMI USB modems
-      - m_modem_hilink - HiLink USB modems
-      - m_modem_hostless - hostlessUSB modems
-      - m_modem_directip - DirectIP USB modems
-      - m_modem_mbim - MBIM USB modems
-      - m_modem_HSO - HSO USB modems
-      - m_modem_android_tether - Android tethering USB modem
-      - m_modem_iphone_tether - iPhone tethering USB modem
-      - m_modem_all - all above modem modules
-      - m_nano - nano editor
-      - m_crelay - crelay USB power switch
-      - m_wget - full wget
-      - m_adblock - LEDE adblock module (includes full wget)
-      - m_all - all above modules
-      - m_none - no modules download
+    List of modules or predefined module sets, to be downloaded offline.
 
 os_list_binaries_url
     URL to os binaries to set in os_list_lede.json file.

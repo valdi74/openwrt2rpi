@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #defaults
-program_version="1.08"
+program_version="1.09"
 media_user_dir="/media/${USER}"
 working_dir="/tmp"
 lede_boot_part_size=25
@@ -9,7 +9,7 @@ lede_root_part_size=300
 lede_os_name="LEDE"
 boot_part_label="LEDE_boot"
 root_part_label="LEDE_root"
-modules_destination="/root/ipk/"
+modules_destination="/root/ipk"
 pause_after_mount="N"
 rc_local="/etc/rc.local"
 wget_opts="q"
@@ -22,6 +22,73 @@ script_dir=$(dirname $(readlink -f $0))
 
 #test run (no img file downloading/decompress):
 #DEBUG=T ./lede2rpi.sh -m Pi3 -r 17.01.1 -p -q -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot1 -e LEDE_root1 -o LEDE1
+
+# USB modems and modules needed
+#        BASE (all): (kmod-usb-core) kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch
+#         RAS (ppp): chat comgt kmod-usb-serial (kmod-usb-serial-wwan) kmod-usb-serial-option
+#         RAS (ACM): chat comgt kmod-usb-acm
+#               NCM: chat (wwan) comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-serial (kmod-usb-serial-wwan) kmod-usb-serial-option (kmod-usb-wdm) kmod-usb-net-huawei-cdc-ncm
+#        Huawei NCM: chat (wwan) comgt-ncm (kmod-usb-net-cdc-ncm kmod-usb-wdm) kmod-usb-net-huawei-cdc-ncm
+#               QMI: (kmod-usb-net kmod-usb-wdm) kmod-usb-net-qmi-wwan (libubox libjson-c libblobmsg-json wwan) uqmi 
+#            HiLink: (kmod-mii kmod-usb-net) kmod-usb-net-cdc-ether
+#          hostless: (kmod-mii kmod-usb-net kmod-usb-net-cdc-ether) kmod-usb-net-rndis
+#          DirectIP: (kmod-usb-net) kmod-usb-net-sierrawireless (comgt kmod-usb-serial kmod-usb-serial-sierrawireless) comgt-directip
+#              MBIM: (kmod-usb-net, kmod-usb-wdm, kmod-usb-net-cdc-ncm) kmod-usb-net-cdc-mbim (wwan) umbim
+#               HSO: comgt [comgt-hso] kmod-usb-net kmod-usb-net-hso
+# Android tethering: (kmod-usb-net kmod-usb-net-cdc-ether) kmod-usb-net-rndis
+#  iPhone tethering: (kmod-usb-net) kmod-usb-net-ipheth (libxml2 libplist zlib libusbmuxd libopenssl libimobiledevice) usbmuxd
+
+# modules set definitions
+m_modem_base="kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch"
+m_modem_ras_ppp="${m_modem_base} chat comgt kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option"
+m_modem_ras_acm="${m_modem_base} chat comgt kmod-usb-acm"
+m_modem_ncm="${m_modem_base} chat wwan comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-serial kmod-usb-serial-wwan kmod-usb-serial-option kmod-usb-wdm kmod-usb-net-huawei-cdc-ncm"
+m_modem_huawei_ncm="${m_modem_base} chat wwan comgt-ncm kmod-usb-net-cdc-ncm kmod-usb-wdm kmod-usb-net-huawei-cdc-ncm"
+m_modem_qmi="${m_modem_base} kmod-usb-net kmod-usb-wdm kmod-usb-net-qmi-wwan libubox libjson-c libblobmsg-json wwan uqmi"
+m_modem_hilink="${m_modem_base} kmod-mii kmod-usb-net kmod-usb-net-cdc-ether"
+m_modem_hostless="${m_modem_base} kmod-mii kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-net-rndis"
+m_modem_directip="${m_modem_base} kmod-usb-net-sierrawireless comgt-directip"
+m_modem_mbim="${m_modem_base} kmod-usb-net kmod-usb-wdm kmod-usb-net-cdc-ncm kmod-usb-net-cdc-mbim wwan umbim"
+m_modem_HSO="${m_modem_base} comgt kmod-usb-net kmod-usb-net-hso"
+m_modem_android_tether="${m_modem_base} kmod-usb-net kmod-usb-net-cdc-ether kmod-usb-net-rndis"
+m_modem_iphone_tether="${m_modem_base} kmod-usb-net kmod-usb-net-ipheth libxml2 libplist zlib libusbmuxd libopenssl libimobiledevice usbmuxd"
+m_modem_all="${m_modem_ras_ppp} ${m_modem_ras_acm} ${m_modem_ncm} ${m_modem_huawei_ncm} ${m_modem_qmi} ${m_modem_hilink} ${m_modem_hostless} ${m_modem_directip} ${m_modem_mbim} ${m_modem_HSO} ${m_modem_android_tether} ${m_modem_iphone_tether}"
+# other modules
+m_nano="terminfo libncurses nano"
+m_crelay="libusb-1.0 libftdi1 hidapi crelay"
+m_wget="libpcre zlib libopenssl wget"
+m_adblock="${m_wget} adblock"
+m_all="${m_modem_all} m_nano m_crelay m_wget m_adblock"
+
+add_module() {
+  local new_mod="${1}"
+  local found
+
+  if [ "${new_mod:0:2}" == "m_" ]; then
+    add_modules "${!new_mod}"
+  else
+    if [ -z "${modules_to_download}" ]; then
+      modules_to_download="${new_mod}"
+    else
+      found=N
+      for old_mod in ${modules_to_download}; do
+        if [ "${old_mod}" == "${new_mod}" ]; then
+          found=T
+          break
+        fi
+      done
+      [ "${found}" == "N" ] && modules_to_download="${modules_to_download} ${new_mod}"
+    fi
+  fi
+}
+
+add_modules() {
+  local new_mod
+
+  for new_mod in ${1}; do
+    add_module "${new_mod}"
+  done
+}
 
 colored_echo() {
   local color=$2
@@ -122,11 +189,28 @@ get_param_from_file() {
     if [[ ! $lhs =~ ^\ *# && -n $lhs && "$lhs" == "$2" ]]; then
         rhs="${rhs%%\#*}"    # Del in line right comments
         rhs="${rhs%%*( )}"   # Del trailing spaces
-        rhs="${rhs%\"*}"     # Del opening string quotes
-        rhs="${rhs#\"*}"     # Del closing string quotes
-        echo "$rhs"
+#        rhs="${rhs%\"*}"     # Del opening string quotes
+#        rhs="${rhs#\"*}"     # Del closing string quotes
+        sed -e 's/^"//' -e 's/"$//' <<<"$rhs"
+#        echo "$rhs"
     fi
   done < $1
+}
+
+download() {
+  local options="$1"
+  local url="$2"
+  local filename="$3"
+  local description="$4"
+
+  if [ -f "${filename}" ]; then
+    print_info "${description} exists, not downloading.\n" yellow
+  else
+    print_info "Downloading ${description}..."
+    # debug
+    [ "$debug" != "T" ] && wget -${options}O "${filename}" "${url}"
+    print_info "done\n"
+  fi
 }
 
 bad_params=N
@@ -196,7 +280,7 @@ OPTIONS:
    lede_release=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
 
 -d working_dir
-   working_dir=<working_directory_path>, optional parameter, default=/tmp/
+   working_dir=<working_directory_path>, optional parameter, default=/tmp
    Directory to store temporary and final files.
 
 -p
@@ -205,10 +289,31 @@ OPTIONS:
 
 -a modules_list
    modules_list='module1 module2 ...', optional parameter
-   List of modules to download and copy to root image into modules_destination directory
+   List of modules/modules sets to download and copy to root image into modules_destination directory.
+   Currently available module sets:
+    - m_modem_base - base modules for USB modems
+    - m_modem_ras_ppp - RAS (ppp) USB modems
+    - m_modem_ras_acm - RAS (ACM) USB modems
+    - m_modem_ncm - NCM USB modems
+    - m_modem_huawei_ncm - Huawei NCM USB modems
+    - m_modem_qmi - QMI USB modems
+    - m_modem_hilink - HiLink USB modems
+    - m_modem_hostless - hostlessUSB modems
+    - m_modem_directip - DirectIP USB modems
+    - m_modem_mbim - MBIM USB modems
+    - m_modem_HSO - HSO USB modems
+    - m_modem_android_tether - Android tethering USB modem
+    - m_modem_iphone_tether - iPhone tethering USB modem
+    - m_modem_all - all above modem modules
+    - m_nano - nano editor
+    - m_crelay - crelay USB power switch
+    - m_wget - full wget
+    - m_adblock - LEDE adblock module (includes full wget)
+    - m_all - all above modules
+    - m_none - no modules download
 
 -b modules_destination
-   modules_destination=<ipk_directory_path>, optional parameter, default=/root/ipk/
+   modules_destination=<ipk_directory_path>, optional parameter, default=/root/ipk
    Directory on LEDE root partition to copy downloaded modules from modules_list
 
 -s initial_script_path
@@ -282,7 +387,7 @@ OPTIONS:
    Destination URL=<os_list_binaries_url><raspberry_model>/[os_setup_filename], exmaple:
    - os_list_binaries_url="http://downloads.sourceforge.net/project/pinn/os/lede2R"
    - raspberry_model="Pi2"
-   Result URL for item "os_info":
+   Result URL for "os_info":
    "http://downloads.sourceforge.net/project/pinn/os/lede2RPi2/os.json"
 
 -h
@@ -319,10 +424,11 @@ noobs_root_image="${destination_dir}/${root_part_label}.tar"
 lede_html="lede.html"
 lede_init_tmp_file="${working_sub_dir}/lede_init.sh"
 modules_download_dir="${working_sub_dir}/ipk"
+repos_download_dir="${working_sub_dir}/repos"
 lede_kernel_image="kernel*.img"
 lede_version_file="usr/lib/os-release"
 lede_kernel_ver_default="4.5"
-lede_repo_cofig="/etc/opkg/distfeeds.conf"
+lede_repo_config="/etc/opkg/distfeeds.conf"
 upgrade_backup_dir="${working_sub_dir}/backup"
 media_dir="${script_dir}/bin"
 noobs_logo_file="${media_dir}/LEDE.png"
@@ -332,6 +438,7 @@ noobs_partitions_config_file="partitions.json"
 noobs_os_config_file="os.json"
 noobs_icon_file="${lede_os_name}.png"
 noobs_partition_setup_file="partition_setup.sh"
+noobs_os_description="LEDE (OpenWrt) for the Raspberry ${raspberry_model}"
 os_list_lede_file="${working_dir}/os_list_lede.json"
 
 [ "$debug" == "T" ] && print_var_name_value DEBUG red bold
@@ -353,31 +460,31 @@ if [ "$verbose" == "T" ]; then
 fi
 
 if [ ! -z "$upgrade_partitions" ]; then
-  upgrade_boot_config=`echo "$upgrade_partitions" | cut -d, -f1`
+  upgrade_boot_config=$(echo "$upgrade_partitions" | cut -d, -f1)
   [ "${upgrade_boot_config:0:5}" != "BOOT=" ] && error_exit "Missing 'BOOT=' in upgrade config: ${upgrade_partitions}"
 
-  upgrade_rpi_dev_boot=`echo ${upgrade_boot_config:5} | cut -d\: -f1`
+  upgrade_rpi_dev_boot=$(echo ${upgrade_boot_config:5} | cut -d\: -f1)
   print_var_name_value_verbose upgrade_rpi_dev_boot
   [ -z "$upgrade_rpi_dev_boot" ] && error_exit "Missing RPi device in upgrade BOOT config: ${upgrade_boot_config:5}"
 
-  upgrade_dir_boot=`echo ${upgrade_boot_config:5} | cut -d\: -f2`
+  upgrade_dir_boot=$(echo ${upgrade_boot_config:5} | cut -d\: -f2)
   print_var_name_value_verbose upgrade_dir_boot
   [ -z "$upgrade_dir_boot" ] && error_exit "Missing local dir in upgrade BOOT config: ${upgrade_boot_config:5}"
   [ ! -d "$upgrade_dir_boot" ] && error_exit "Upgrade BOOT config: ${upgrade_dir_boot} is not a directory"
 
-  upgrade_root_config=`echo "$upgrade_partitions" | cut -d, -f2`
+  upgrade_root_config=$(echo "$upgrade_partitions" | cut -d, -f2)
   [ "${upgrade_root_config:0:5}" != "ROOT=" ] && error_exit "Missing 'ROOT=' in upgrade config: ${upgrade_partitions}"
 
-  upgrade_rpi_dev_root=`echo ${upgrade_root_config:5} | cut -d\: -f1`
+  upgrade_rpi_dev_root=$(echo ${upgrade_root_config:5} | cut -d\: -f1)
   print_var_name_value_verbose upgrade_rpi_dev_root
   [ -z "$upgrade_rpi_dev_root" ] && error_exit "Missing RPi device in upgrade ROOT config: ${upgrade_root_config:5}"
 
-  upgrade_dir_root=`echo ${upgrade_root_config:5} | cut -d\: -f2`
+  upgrade_dir_root=$(echo ${upgrade_root_config:5} | cut -d\: -f2)
   print_var_name_value_verbose upgrade_dir_root
   [ -z "$upgrade_dir_root" ] && error_exit "Missing local dir in upgrade ROOT config: ${upgrade_root_config:5}"
   [ ! -d "$upgrade_dir_root" ] && error_exit "Upgrade ROOT config: ${upgrade_dir_root} is not a directory"
 
-  ANSWER=`input_line "Are you sure to delete all files from $upgrade_dir_boot and $upgrade_dir_root and upgrade LEDE instalation? Enter 'yes': "`
+  ANSWER=$(input_line "Are you sure to delete all files from $upgrade_dir_boot and $upgrade_dir_root and upgrade LEDE instalation? Enter 'yes': ")
   [ "$ANSWER" != "yes" ] && error_exit "User abort"
 fi
 
@@ -419,34 +526,27 @@ clean_and_exit() {
 
 trap 'clean_and_exit "ERROR COMMAND: $BASH_COMMAND in line $LINENO"' $trap_signals
 
-#cd "${working_dir}"
 mkdir -p "${working_sub_dir}"
 
-print_info "Downloading LEDE html page..."
-# debug
-[ "$debug" != "T" ] && wget -${wget_opts}O "${working_sub_dir}/${lede_html}" "${lede_download}"
-print_info "done\n"
+download "${wget_opts}" "${lede_download}" "${working_sub_dir}/${lede_html}" "LEDE html page"
 
-lede_image_compr=`grep -o '"'${lede_image_mask}'"' "${working_sub_dir}/${lede_html}" | grep -o "${lede_image_mask}"`
+lede_image_compr=$(grep -o '"'${lede_image_mask}'"' "${working_sub_dir}/${lede_html}" | grep -o "${lede_image_mask}")
 
 [ -z "${lede_image_compr}" ] && clean_and_exit "Can't get LEDE image name"
 print_var_name_value_verbose lede_image_compr
 
-lede_release_date=`grep -o '<td class="d">.*</td>' "${working_sub_dir}/${lede_html}" | head -n1`
-lede_release_date=`date -d"${lede_release_date:14: -5}" +%Y-%m-%d`
+lede_release_date=$(grep -o '<td class="d">.*</td>' "${working_sub_dir}/${lede_html}" | head -n1)
+lede_release_date=$(date -d"${lede_release_date:14: -5}" +%Y-%m-%d)
 print_var_name_value_verbose lede_release_date
 
-print_info "Downloading LEDE image..."
-# debug
-[ "$debug" != "T" ] && wget -${wget_opts}O "${working_sub_dir}/${lede_image_compr}" "${lede_download}/${lede_image_compr}"
-print_info "done\n"
+download "${wget_opts}" "${lede_download}/${lede_image_compr}" "${working_sub_dir}/${lede_image_compr}" "LEDE image"
 
 print_info "Decompressing LEDE image..."
 # debug
-[ "$debug" != "T" ] && gzip -d${gzip_opts} "${working_sub_dir}/${lede_image_compr}"
+[ "$debug" != "T" ] && gzip -dkf${gzip_opts} "${working_sub_dir}/${lede_image_compr}"
 print_info "done\n"
 
-lede_image_decompr=`basename "${lede_image_compr}" "${lede_image_compr_ext}"`
+lede_image_decompr=$(basename "${lede_image_compr}" "${lede_image_compr_ext}")
 
 [ -z "${lede_image_decompr}" ] && clean_and_exit "Can't unpack LEDE image"
 
@@ -457,35 +557,39 @@ if [ "$verbose" == "T" ]; then
   print_var_name_value_verbose lede_root_part_size
 fi
 
-for i in $(seq 1 20); do
-  if [ ! -e "{block_device_prefix}${i}" ]; then
-    block_device_boot="/dev/dm-$((i))"
-    block_device_root="/dev/dm-$((++i))"
-    break;
-  fi
+for i in $(seq 0 99); do
+  block_device_boot="${block_device_prefix}${i}"
+  [ ! -e "${block_device_boot}" ] && break
+  block_device_boot=""
 done
 
 [ -z "${block_device_boot}" ] && error_exit "Can't evaluate block_device_boot"
+
+for i in $(seq $((i+1)) 99); do
+  block_device_root="${block_device_prefix}${i}"
+  [ ! -e "${block_device_root}" ] && break
+  block_device_root=""
+done
+
+[ -z "${block_device_root}" ] && error_exit "Can't evaluate block_device_root"
 
 print_info "Create device maps from ${working_sub_dir}/${lede_image_decompr}\n"
 sudo kpartx -sa${kpartx_opts} "${working_sub_dir}/${lede_image_decompr}"
 sleep 1
 
-boot_uuid=`udisksctl mount --block-device "${block_device_boot}" | grep -o "${media_user_dir}/.*"`
-boot_uuid=`basename "${boot_uuid}" .`
+boot_uuid=$(udisksctl mount --block-device "${block_device_boot}" | grep -o "${media_user_dir}/.*")
+boot_uuid=$(basename "${boot_uuid}" .)
 [ -z "${boot_uuid}" ] && clean_and_exit "Can't evaluate boot_uuid name"
 print_var_name_value_verbose boot_uuid
 boot_partition_dir="${media_user_dir}/${boot_uuid}"
 
-root_uuid=`udisksctl mount --block-device "${block_device_root}" | grep -o "${media_user_dir}/.*"`
-root_uuid=`basename "${root_uuid}" .`
+root_uuid=$(udisksctl mount --block-device "${block_device_root}" | grep -o "${media_user_dir}/.*")
+root_uuid=$(basename "${root_uuid}" .)
 [ -z "${root_uuid}" ] && clean_and_exit "Can't evaluate root_uuid name"
 print_var_name_value_verbose root_uuid
 root_partition_dir="${media_user_dir}/${root_uuid}"
 
-#cd "${boot_partition_dir}"
-
-lede_kernel_ver=`grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" "${boot_partition_dir}"/${lede_kernel_image} | head -n1`
+lede_kernel_ver=$(grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" "${boot_partition_dir}"/${lede_kernel_image} | head -n1)
 lede_kernel_ver="${lede_kernel_ver:14}"
 [ -z "${lede_kernel_ver}" ] && lede_kernel_ver="${lede_kernel_ver_default}"
 print_var_name_value_verbose lede_kernel_ver
@@ -494,34 +598,47 @@ cat <<EOF > "${lede_init_tmp_file}"
 #!/bin/sh
 EOF
 
-if [ ! -z "$modules_list" ]; then
-  print_info "Downloading modules: (${modules_list}) into $modules_destination directory on LEDE root partition\n"
+if [ ! -z "${modules_list}" ]; then
+  print_info "Meta modules to decode: '${modules_list}'\n"
+  add_modules "${modules_list}"
+  print_info "Downloading modules: '${modules_to_download}' into ${modules_destination} directory on LEDE root partition\n"
 
-  separator=""
-  modules_pattern=""
-  for module in $modules_list; do
-    modules_pattern=${modules_pattern}${separator}'(?<=<a href=")'${module}'_.*?\.ipk(?=">)'
-    separator="|"
-    echo 'opkg install '${modules_destination}'/'${module}'*.ipk' >> "${lede_init_tmp_file}"
+  #[ -d "${repos_download_dir}" ] && print_info "Warning: directory ${repos_download_dir} exists. Existing repos will not be downloaded.\n" yellow
+  #[ -d "${modules_download_dir}" ] && print_info "Warning: directory ${modules_download_dir} exists. Existing files will not be downloaded.\n" yellow
+
+  mkdir -p "${repos_download_dir}" "${modules_download_dir}"
+  #rm -f "${repos_download_dir}"/* "${modules_download_dir}"/* #2>/dev/null
+
+  i=1
+#  for repo_url in $(grep -o 'http://.*' "${root_partition_dir}${lede_repo_config}"); do
+  for repo_name_url in $(cut -f2,3 -d" " --output-delimiter="@" <"${root_partition_dir}${lede_repo_config}"); do
+    repo_filename="${repos_download_dir}/${i}_${repo_name_url%%@*}.html"
+    repo_url="${repo_name_url#*@}"
+    download "${wget_opts}" "${repo_url}" "${repo_filename}" "LEDE repository ${repo_url}"
+    echo -e "\n${repo_url}" >> "${repo_filename}"
+    ((i++))
+  done
+
+  modules_downloaded=0
+  for module in $modules_to_download; do
+    package_name=$(grep -oP '(?<=<a href=")'${module}'_.*?\.ipk(?=">)' "${repos_download_dir}"/*)
+
+    if [ -z "${package_name}" ]; then
+      print_info "Can't find module ${module} in repos\n" "red"
+    else
+      repo_filename="${package_name%%:*}"
+      package_name="${package_name#*:}"
+      repo_url=$(tail -n1 "${repo_filename}")
+      download "${wget_opts}" "${repo_url}/${package_name}" "${modules_download_dir}/${package_name}" "module ${package_name}"
+      echo 'opkg install "'${modules_destination}'/'${package_name}'"' >> "${lede_init_tmp_file}"
+      ((modules_downloaded++)) && true
+    fi
   done
   echo '# rm '${modules_destination}'/*.ipk' >> "${lede_init_tmp_file}"
   echo '# rmdir '${modules_destination} >> "${lede_init_tmp_file}"
-  [ "$debug" == "T" ] && print_var_name_value_verbose modules_pattern
 
-  mkdir -p "${modules_download_dir}"
-  rm -f "${modules_download_dir}"/* #2>/dev/null
-
-  modules_downloaded=0
-  for repo_addr in $(grep -o 'http://.*' "${root_partition_dir}${lede_repo_cofig}"); do
-    for package_name in $(wget -${wget_opts}O - "${repo_addr}" | grep -oP "${modules_pattern}"); do
-      print_info "Downloading ${package_name}..."
-      wget -${wget_opts}P "${modules_download_dir}" "${repo_addr}/${package_name}"
-      print_info "done\n"
-      modules_downloaded=$((modules_downloaded+1))
-    done
-  done
   sudo cp -R "${modules_download_dir}/." "${root_partition_dir}/${modules_destination}"
-  modules_count=`wc -w <<<"$modules_list"`
+  modules_count=$(wc -w <<<"$modules_to_download")
   [ "${modules_downloaded}" -ne "${modules_count}" ] && print_color="red" || print_color=""
   print_info "Modules downloaded/all: ${modules_downloaded}/${modules_count}\n" "${print_color}"
 fi
@@ -559,16 +676,12 @@ if [ -z "$dont_generate_files" ]; then
   mkdir -p "${destination_dir}"
   rm -f "${destination_dir}"/* #2>/dev/null
 
-  #cd "${boot_partition_dir}"
-
   tar -cpf "${noobs_boot_image}" -C "${boot_partition_dir}" . || clean_and_exit "tar boot image failed"
-  boot_tar_size=`du -m "${noobs_boot_image}" | cut -f1` #ls "${noobs_boot_image}" -l --block-size=1MB
+  boot_tar_size=$(du -m "${noobs_boot_image}" | cut -f1) #ls "${noobs_boot_image}" -l --block-size=1MB
   print_var_name_value_verbose boot_tar_size
   print_info "xz compressing partition boot..."
-  xz -9 -e "${noobs_boot_image}"
+  xz -f -9 -e "${noobs_boot_image}"
   print_info "done\n"
-
-  #cd "${root_partition_dir}"
 
   lede_version_id=$(get_param_from_file "${root_partition_dir}/${lede_version_file}" VERSION_ID)
   lede_build_id=$(get_param_from_file "${root_partition_dir}/${lede_version_file}" BUILD_ID)
@@ -577,10 +690,10 @@ if [ -z "$dont_generate_files" ]; then
 
   sudo tar -cpf "${noobs_root_image}" -C "${root_partition_dir}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/* || clean_and_exit "tar root image failed"
   sudo chown ${USER}:${USER} "${noobs_root_image}"
-  root_tar_size=`du -m "${noobs_root_image}" | cut -f1`
+  root_tar_size=$(du -m "${noobs_root_image}" | cut -f1)
   print_var_name_value_verbose root_tar_size
   print_info "xz compressing partition root..."
-  xz -9 -e "${noobs_root_image}"
+  xz -f -9 -e "${noobs_root_image}"
   print_info "done\n"
 
   ##################################################################### partition_setup.sh
@@ -639,7 +752,7 @@ EOF
   "version": "${lede_version}",
   "release_date": "${lede_release_date}",
   "kernel": "${lede_kernel_ver}",
-  "description": "LEDE for the Raspberry ${raspberry_model} (OpenWrt)",
+  "description": "${noobs_os_description}",
   "url": "${lede_download}",
   "supported_hex_revisions": "${raspberry_hex_revisions}",
   "supported_models": [
@@ -664,7 +777,7 @@ EOF
     cat <<EOF >> "${os_list_lede_file}"
         {
             "os_name":	    "${lede_os_name}",
-            "description":  "LEDE for the Raspberry ${raspberry_model} (OpenWrt)",
+            "description":  "${noobs_os_description}",
             "release_date": "${lede_release_date}",
             "feature_level": 0,
             "supported_hex_revisions": "${raspberry_hex_revisions}",
@@ -720,8 +833,8 @@ if [ "$delete_temp_files" == "T" ]; then
   rm "${working_sub_dir}/${lede_image_decompr}"
   rm "${working_sub_dir}/${lede_html}"
   if [ ! -z "$modules_list" ]; then
-    rm -f "${modules_download_dir}"/* #2>/dev/null
-    rmdir "${modules_download_dir}"
+    rm -f "${modules_download_dir}"/* "${repos_download_dir}"/* #2>/dev/null
+    rmdir "${modules_download_dir}" "${repos_download_dir}"
   fi
   rm "${lede_init_tmp_file}"
 fi
