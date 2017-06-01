@@ -54,7 +54,7 @@ EOF
 
 chmod u+x "$SHUTDOWN_BUTTON_SCRIPT"
 
-sed -i "/exit 0/i ${SHUTDOWN_BUTTON_SCRIPT} &" /etc/rc.local
+sed -i "/^exit 0/i ${SHUTDOWN_BUTTON_SCRIPT} &" /etc/rc.local
 
 sync
 sleep 10
