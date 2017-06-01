@@ -4,8 +4,8 @@
 program_version="1.09"
 media_user_dir="/media/${USER}"
 working_dir="/tmp"
-lede_boot_part_size=25
-lede_root_part_size=300
+lede_boot_part_size=28
+lede_root_part_size=302
 lede_os_name="LEDE"
 boot_part_label="LEDE_boot"
 root_part_label="LEDE_root"
@@ -54,9 +54,10 @@ m_modem_android_tether="${m_modem_base} kmod-usb-net kmod-usb-net-cdc-ether kmod
 m_modem_iphone_tether="${m_modem_base} kmod-usb-net kmod-usb-net-ipheth libxml2 libplist zlib libusbmuxd libopenssl libimobiledevice usbmuxd"
 m_modem_all="${m_modem_ras_ppp} ${m_modem_ras_acm} ${m_modem_ncm} ${m_modem_huawei_ncm} ${m_modem_qmi} ${m_modem_hilink} ${m_modem_hostless} ${m_modem_directip} ${m_modem_mbim} ${m_modem_HSO} ${m_modem_android_tether} ${m_modem_iphone_tether}"
 # other modules
+m_mt7601u="kmod-mac80211 mt7601u-firmware kmod-mt7601u"
 m_nano="terminfo libncurses nano"
 m_crelay="libusb-1.0 libftdi1 hidapi crelay"
-m_wget="libpcre zlib libopenssl wget"
+m_wget="librt libpcre zlib libopenssl wget"
 m_adblock="${m_wget} adblock"
 m_all="${m_modem_all} m_nano m_crelay m_wget m_adblock"
 
