@@ -322,7 +322,7 @@ OPTIONS:
    Path to store initial configuration script on LEDE root partition. Example: /root/init_config.sh
 
 -i include_initial_file
-   modules_list=<include_initial_script_path>, optional parameter
+   include_initial_file=<include_initial_script_path>, optional parameter
    Path to local script, to be included in initial configuration script initial_script_path.
 
 -g run_command_after_mount
@@ -332,7 +332,7 @@ OPTIONS:
 
 -c
    optional parameter, default=no autorun initial script
-   Run initial script initial_script_path once. Path to initial script will be added do /etc/rc.local and removed after first run.
+   Run initial script initial_script_path once. Path to initial script will be added to /etc/rc.local and removed after first run.
 
 -k lede_boot_part_size
    lede_boot_part_size=<boot_partition_size_in_mb>, optional parameter, default=25
@@ -404,6 +404,8 @@ fi
 [ -z "${lede_release}" ] && echo "LEDE release not specified" && bad_params=T
 
 [ "${bad_params}" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r lede_release|snapshot [-d working_dir] [-p] [-v] [-q] [-w] [-t] [-a modules_list] [-b modules_destination] [-s initial_script_path] [-i include_initial_file] [-g run_command_after_mount] [-q] [-k lede_boot_part_size] [-l lede_root_part_size] [-n boot_part_label] [-e root_part_label] [-o lede_os_name] [-u upgrade_partitions]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
+
+[ "${raspberry_model:0:3}" == "rpi" ] && raspberry_model="Pi${raspberry_model:3:1}"
 
 case "${raspberry_model}" in
   "Pi")  lede_subtarget="bcm2708"; raspberry_models="\"Pi Model\", \"Pi Compute Module\", \"Pi Zero\""; raspberry_hex_revisions="2,3,4,5,6,7,8,9,d,e,f,10,11,12,13,14,19,0092" ;;
@@ -622,7 +624,10 @@ if [ ! -z "${modules_list}" ]; then
 
   modules_downloaded=0
   for module in $modules_to_download; do
-    package_name=$(grep -oP '(?<=<a href=")'${module}'_.*?\.ipk(?=">)' "${repos_download_dir}"/*)
+    print_var_name_value_verbose module
+    print_var_name_value_verbose repos_download_dir
+    package_name=$(grep -oP '(?<=<a href=")'${module}'_.*?\.ipk(?=">)' "${repos_download_dir}"/*)  && true
+    print_var_name_value_verbose package_name
 
     if [ -z "${package_name}" ]; then
       print_info "Can't find module ${module} in repos\n" "red"
@@ -649,7 +654,7 @@ if [ ! -z "${run_initial_script_once}" ]; then
 
   echo 'sed -i "/#lede2rpi_delete/d" '${rc_local} >> "${lede_init_tmp_file}"
 
-  sudo sed -i "/exit 0/i ${initial_script_path} #lede2rpi_delete" "${root_partition_dir}${rc_local}"
+  sudo sed -i "/exit 0/i ${initial_script_path} > ${initial_script_path}.log  #lede2rpi_delete\n" "${root_partition_dir}${rc_local}"
 fi
 
 if [ ! -z "${include_initial_file}" ]; then

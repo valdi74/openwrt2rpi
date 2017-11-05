@@ -77,7 +77,7 @@ OPTIONS:
    Path to store initial configuration script on LEDE root partition. Example: /root/init_config.sh
 
 -i include_initial_file
-   modules_list=<include_initial_script_path>, optional parameter
+   include_initial_file=<include_initial_script_path>, optional parameter
    Path to local script, to be included in initial configuration script initial_script_path.
 
 -g run_command_after_mount
