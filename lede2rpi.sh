@@ -774,7 +774,7 @@ EOF
   print_info "Creating ${noobs_marketing_name}\n"
   tar -cpf "${destination_dir}/${noobs_marketing_name}" -C "${noobs_marketing_dir}" .
   #####################################################################
-  print_info "\nLEDE files for NOOBS are stored in ${destination_dir} directory.\nNow you can copy directory LEDE to NOOBS/PINN SD card into /os folder\n\n"
+  print_info "\nLEDE files for NOOBS are stored in ${destination_dir} directory.\nNow you can copy directory '${raspberry_model_dir}' to NOOBS/PINN SD card into /os folder\n\n"
 
   if [ ! -z "$os_list_binaries_url" ]; then
     print_info "Appending new os to ${os_list_lede_file} file\n"
