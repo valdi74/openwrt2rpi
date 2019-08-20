@@ -4,11 +4,11 @@
 program_version="1.09"
 media_user_dir="/media/${USER}"
 working_dir="/tmp"
-lede_boot_part_size=28
-lede_root_part_size=302
-lede_os_name="LEDE"
-boot_part_label="LEDE_boot"
-root_part_label="LEDE_root"
+openwrt_boot_part_size=28
+openwrt_root_part_size=302
+openwrt_os_name="OpenWrt"
+boot_part_label="OpenWrt_boot"
+root_part_label="OpenWrt_root"
 modules_destination="/root/ipk"
 pause_after_mount="N"
 rc_local="/etc/rc.local"
@@ -21,7 +21,7 @@ delete_temp_files="T"
 script_dir=$(dirname $(readlink -f $0))
 
 #test run (no img file downloading/decompress):
-#DEBUG=T ./lede2rpi.sh -m Pi3 -r 17.01.1 -p -q -s /root/init_config.sh -i ~/tmp/my_lede_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n LEDE_boot1 -e LEDE_root1 -o LEDE1
+#DEBUG=T ./openwrt2rpi.sh -m Pi3 -r 18.06.3 -p -q -s /root/init_config.sh -i ~/tmp/my_openwrt_init.sh -b /root/ipk -a "kmod-usb2 librt libusb-1.0" -k 26 -l 302 -n OpenWrt_boot1 -e OpenWrt_root1 -o OpenWrt1
 
 # USB modems and modules needed
 #        BASE (all): (kmod-usb-core) kmod-usb-ehci kmod-usb2 librt libusb-1.0 usb-modeswitch
@@ -131,9 +131,9 @@ print_usage() {
 
 print_var_name_value() {
   if [ -z "$2" ]; then
-    echo -ne "$1 = ${!1}\n"
+    echo -ne "$1 = '${!1}'\n"
   else
-    colored_echo "$1 = ${!1}\n" "$2" "$3"
+    colored_echo "$1 = '${!1}'\n" "$2" "$3"
   fi
 }
 
@@ -219,7 +219,7 @@ while getopts ":m:r:d:a:b:s:i:g:k:l:n:e:o:u:j:cqvpwth" opt; do
   case $opt in
     m) raspberry_model="$OPTARG"
     ;;
-    r) lede_release="$OPTARG"
+    r) openwrt_release="$OPTARG"
     ;;
     d) working_dir="$OPTARG"
     ;;
@@ -233,15 +233,15 @@ while getopts ":m:r:d:a:b:s:i:g:k:l:n:e:o:u:j:cqvpwth" opt; do
     ;;
     g) run_command_after_mount="$OPTARG"
     ;;
-    k) lede_boot_part_size="$OPTARG"
+    k) openwrt_boot_part_size="$OPTARG"
     ;;
-    l) lede_root_part_size="$OPTARG"
+    l) openwrt_root_part_size="$OPTARG"
     ;;
     n) boot_part_label="$OPTARG"
     ;;
     e) root_part_label="$OPTARG"
     ;;
-    o) lede_os_name="$OPTARG"
+    o) openwrt_os_name="$OPTARG"
     ;;
     u) upgrade_partitions="$OPTARG"
     ;;
@@ -270,15 +270,15 @@ if [ "$help" == "T" ]; then
   echo "
 Usage:
 
-lede2rpi.sh -m raspberry_model -r lede_release [OPTIONS]
+openwrt2rpi.sh -m raspberry_model -r openwrt_release [OPTIONS]
 
 OPTIONS:
 
 -m raspberry_model
    raspberry_model=Pi|Pi2|Pi3, mandatory parameter
 
--r lede_release
-   lede_release=snapshot|17.01.0|17.01.1|future_release_name, mandatory parameter
+-r openwrt_release
+   openwrt_release=snapshot|18.06.[0..3]|future_release_name, mandatory parameter
 
 -d working_dir
    working_dir=<working_directory_path>, optional parameter, default=/tmp
@@ -309,17 +309,17 @@ OPTIONS:
     - m_nano - nano editor
     - m_crelay - crelay USB power switch
     - m_wget - full wget
-    - m_adblock - LEDE adblock module (includes full wget)
+    - m_adblock - OpenWrt adblock module (includes full wget)
     - m_all - all above modules
     - m_none - no modules download
 
 -b modules_destination
    modules_destination=<ipk_directory_path>, optional parameter, default=/root/ipk
-   Directory on LEDE root partition to copy downloaded modules from modules_list
+   Directory on OpenWrt root partition to copy downloaded modules from modules_list
 
 -s initial_script_path
    initial_script_path=<initial_script_path>, optional parameter, default=none
-   Path to store initial configuration script on LEDE root partition. Example: /root/init_config.sh
+   Path to store initial configuration script on OpenWrt root partition. Example: /root/init_config.sh
 
 -i include_initial_file
    include_initial_file=<include_initial_script_path>, optional parameter
@@ -334,25 +334,25 @@ OPTIONS:
    optional parameter, default=no autorun initial script
    Run initial script initial_script_path once. Path to initial script will be added to /etc/rc.local and removed after first run.
 
--k lede_boot_part_size
-   lede_boot_part_size=<boot_partition_size_in_mb>, optional parameter, default=25
-   LEDE boot partition size in MB.
+-k openwrt_boot_part_size
+   openwrt_boot_part_size=<boot_partition_size_in_mb>, optional parameter, default=25
+   OpenWrt boot partition size in MB.
 
--l lede_root_part_size
-   lede_root_part_size=<root_partition_size_in_mb>, optional parameter, default=300
-   LEDE root partition size in MB.
+-l openwrt_root_part_size
+   openwrt_root_part_size=<root_partition_size_in_mb>, optional parameter, default=300
+   OpenWrt root partition size in MB.
 
 -n boot_part_label
-   boot_part_label=<boot_partition_label>, optional parameter, default=LEDE_boot
-   LEDE boot partition label.
+   boot_part_label=<boot_partition_label>, optional parameter, default=OpenWrt_boot
+   OpenWrt boot partition label.
 
 -e root_part_label
-   root_part_label=<root_partition_label>, optional parameter, default=LEDE_root
-   LEDE root partition label.
+   root_part_label=<root_partition_label>, optional parameter, default=OpenWrt_root
+   OpenWrt root partition label.
 
--o lede_os_name
-   lede_os_name=<lede_os_name>, optional parameter, default=LEDE
-   LEDE os name in os.json
+-o openwrt_os_name
+   openwrt_os_name=<openwrt_os_name>, optional parameter, default=OpenWrt
+   OpenWrt os name in os.json
 
 -q
    optional parameter, default=no quiet
@@ -364,26 +364,26 @@ OPTIONS:
 
 -u upgrade_partitions
    upgrade_partitions='BOOT=<RPi_boot_dev>:<local_boot_dir>,ROOT=<RPi_root_dev>:<local_root_dir>', optional parameter
-   Upgrade existing LEDE instalation. Use with care! You shouldn't use this option unless you know what you are doing.
+   Upgrade existing OpenWrt instalation. Use with care! You shouldn't use this option unless you know what you are doing.
    WARNING: all files from <local_boot_dir> and <local_root_dir> will be DELETED.
-   example: -u BOOT=/dev/mmcblk0p6:/media/$USER/LEDE_boot,ROOT=/dev/mmcblk0p7:/media/$USER/LEDE_root
+   example: -u BOOT=/dev/mmcblk0p6:/media/$USER/OpenWrt_boot,ROOT=/dev/mmcblk0p7:/media/$USER/OpenWrt_root
    Assume that:
     - boot partition on RPi is /dev/mmcblk0p6
-    - boot partition is now mounted in /media/$USER/LEDE_boot
+    - boot partition is now mounted in /media/$USER/OpenWrt_boot
     - root partition on RPi is /dev/mmcblk0p7
-    - root partition is now mounted in /media/$USER/LEDE_root
+    - root partition is now mounted in /media/$USER/OpenWrt_root
 
 -w
    optional parameter, default=generate NOOBS/PINN files
-   Don't generate NOOBS/PINN files in LEDE directory. Useful with -u (only upgrade).
+   Don't generate NOOBS/PINN files in OpenWrt directory. Useful with -u (only upgrade).
 
 -t
    optional parameter, default=delete temporary files
-   Don't delete temporary files (LEDE image, ipk, etc.)
+   Don't delete temporary files (OpenWrt image, ipk, etc.)
 
 -j os_list_binaries_url
    optional parameter, default=<empty> -> don't generate 
-   Create (append mode) os_list_lede.json for NOOBS/PINN on-line installation.
+   Create (append mode) os_list_openwrt.json for NOOBS/PINN on-line installation.
    File will be created in <working_dir> directory.
    Destination URL=<os_list_binaries_url><raspberry_model>/[os_setup_filename], exmaple:
    - os_list_binaries_url="http://downloads.sourceforge.net/project/pinn/os/lede2R"
@@ -397,52 +397,52 @@ OPTIONS:
   exit
 fi
 
-[ ! "${quiet}" == "T" ] && echo "LEDE2RPi version ${program_version}, RPi model=${raspberry_model}, LEDE release=${lede_release}"
+[ ! "${quiet}" == "T" ] && echo "OpenWrt2RPi version ${program_version}, RPi model=${raspberry_model}, OpenWrt release=${openwrt_release}"
 
 [ -z "${raspberry_model}" ] && echo "Model not specified" && bad_params=T
 
-[ -z "${lede_release}" ] && echo "LEDE release not specified" && bad_params=T
+[ -z "${openwrt_release}" ] && echo "OpenWrt release not specified" && bad_params=T
 
-[ "${bad_params}" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r lede_release|snapshot [-d working_dir] [-p] [-v] [-q] [-w] [-t] [-a modules_list] [-b modules_destination] [-s initial_script_path] [-i include_initial_file] [-g run_command_after_mount] [-q] [-k lede_boot_part_size] [-l lede_root_part_size] [-n boot_part_label] [-e root_part_label] [-o lede_os_name] [-u upgrade_partitions]" "-m Pi3 -r 17.01.1" "-m Pi2 -r 17.01.0" "-m Pi  -r snapshot" "-h # help"
+[ "${bad_params}" == "T" ] && print_usage "-m Pi|Pi2|Pi3 -r openwrt_release|snapshot [-d working_dir] [-p] [-v] [-q] [-w] [-t] [-a modules_list] [-b modules_destination] [-s initial_script_path] [-i include_initial_file] [-g run_command_after_mount] [-q] [-k openwrt_boot_part_size] [-l openwrt_root_part_size] [-n boot_part_label] [-e root_part_label] [-o openwrt_os_name] [-u upgrade_partitions]" "-m Pi3 -r 18.06.3" "-m Pi2 -r 18.06.3" "-m Pi  -r snapshot" "-h # help"
 
 [ "${raspberry_model:0:3}" == "rpi" ] && raspberry_model="Pi${raspberry_model:3:1}"
 
 case "${raspberry_model}" in
-  "Pi")  lede_subtarget="bcm2708"; raspberry_models="\"Pi Model\", \"Pi Compute Module\", \"Pi Zero\""; raspberry_hex_revisions="2,3,4,5,6,7,8,9,d,e,f,10,11,12,13,14,19,0092" ;;
-  "Pi2") lede_subtarget="bcm2709"; raspberry_models="\"Pi 2\""; raspberry_hex_revisions="1040,1041" ;;
-  "Pi3") lede_subtarget="bcm2710"; raspberry_models="\"Pi 3\""; raspberry_hex_revisions="2082" ;;
+  "Pi")  openwrt_subtarget="bcm2708"; raspberry_models="\"Pi Model\", \"Pi Compute Module\", \"Pi Zero\""; raspberry_hex_revisions="2,3,4,5,6,7,8,9,d,e,f,10,11,12,13,14,19,0092" ;;
+  "Pi2") openwrt_subtarget="bcm2709"; raspberry_models="\"Pi 2\""; raspberry_hex_revisions="1040,1041" ;;
+  "Pi3") openwrt_subtarget="bcm2710"; raspberry_models="\"Pi 3\""; raspberry_hex_revisions="2082" ;;
   *) error_exit "Unrecognized model: ${raspberry_model}"
 esac
 
-[ "$lede_release" == "snapshot" ] && lede_download_dir="snapshots" || lede_download_dir="releases/${lede_release}"
-lede_download="https://downloads.lede-project.org/${lede_download_dir}/targets/brcm2708/${lede_subtarget}"
-lede_image_compr_ext=".gz"
-lede_image_mask="lede.*${lede_subtarget}.*\.img\\${lede_image_compr_ext}"
+[ "$openwrt_release" == "snapshot" ] && openwrt_download_dir="snapshots" || openwrt_download_dir="releases/${openwrt_release}"
+openwrt_download="https://downloads.openwrt.org/${openwrt_download_dir}/targets/brcm2708/${openwrt_subtarget}"
+openwrt_image_compr_ext=".gz"
+openwrt_image_mask="openwrt.*${openwrt_subtarget}.*\-ext4-factory.img\\${openwrt_image_compr_ext}"
 block_device_prefix="/dev/dm-"
-raspberry_model_dir="lede2R${raspberry_model}"
-working_sub_dir="${working_dir}/${raspberry_model_dir}_${lede_release}"
+raspberry_model_dir="openwrt2R${raspberry_model}"
+working_sub_dir="${working_dir}/${raspberry_model_dir}_${openwrt_release}"
 destination_dir="${working_sub_dir}/${raspberry_model_dir}"
 noobs_boot_image="${destination_dir}/${boot_part_label}.tar"
 noobs_root_image="${destination_dir}/${root_part_label}.tar"
-lede_html="lede.html"
-lede_init_tmp_file="${working_sub_dir}/lede_init.sh"
+openwrt_html="openwrt.html"
+openwrt_init_tmp_file="${working_sub_dir}/openwrt_init.sh"
 modules_download_dir="${working_sub_dir}/ipk"
 repos_download_dir="${working_sub_dir}/repos"
-lede_kernel_image="kernel*.img"
-lede_version_file="usr/lib/os-release"
-lede_kernel_ver_default="4.5"
-lede_repo_config="/etc/opkg/distfeeds.conf"
+openwrt_kernel_image="kernel*.img"
+openwrt_version_file="usr/lib/os-release"
+openwrt_kernel_ver_default="4.5"
+openwrt_repo_config="/etc/opkg/distfeeds.conf"
 upgrade_backup_dir="${working_sub_dir}/backup"
 media_dir="${script_dir}/bin"
-noobs_logo_file="${media_dir}/LEDE.png"
+noobs_logo_file="${media_dir}/OpenWrt.png"
 noobs_marketing_dir="${media_dir}/marketing"
 noobs_marketing_name="marketing.tar"
 noobs_partitions_config_file="partitions.json"
 noobs_os_config_file="os.json"
-noobs_icon_file="${lede_os_name}.png"
+noobs_icon_file="${openwrt_os_name}.png"
 noobs_partition_setup_file="partition_setup.sh"
-noobs_os_description="LEDE (OpenWrt) for the Raspberry ${raspberry_model}"
-os_list_lede_file="${working_dir}/os_list_lede.json"
+noobs_os_description="OpenWrt for the Raspberry ${raspberry_model}"
+os_list_openwrt_file="${working_dir}/os_list_openwrt.json"
 
 [ "$debug" == "T" ] && print_var_name_value DEBUG red bold
 
@@ -453,12 +453,12 @@ if [ "$verbose" == "T" ]; then
   stdout="/dev/stdout"
   quiet=N
   print_var_name_value_verbose destination_dir
-  print_var_name_value_verbose lede_image_mask
+  print_var_name_value_verbose openwrt_image_mask
   print_var_name_value_verbose raspberry_model
   print_var_name_value_verbose raspberry_models
-  print_var_name_value_verbose lede_subtarget
-  print_var_name_value_verbose lede_release
-  print_var_name_value_verbose lede_download
+  print_var_name_value_verbose openwrt_subtarget
+  print_var_name_value_verbose openwrt_release
+  print_var_name_value_verbose openwrt_download
   print_var_name_value_verbose upgrade_partitions
 fi
 
@@ -487,7 +487,7 @@ if [ ! -z "$upgrade_partitions" ]; then
   [ -z "$upgrade_dir_root" ] && error_exit "Missing local dir in upgrade ROOT config: ${upgrade_root_config:5}"
   [ ! -d "$upgrade_dir_root" ] && error_exit "Upgrade ROOT config: ${upgrade_dir_root} is not a directory"
 
-  ANSWER=$(input_line "Are you sure to delete all files from $upgrade_dir_boot and $upgrade_dir_root and upgrade LEDE instalation? Enter 'yes': ")
+  ANSWER=$(input_line "Are you sure to delete all files from $upgrade_dir_boot and $upgrade_dir_root and upgrade OpenWrt instalation? Enter 'yes': ")
   [ "$ANSWER" != "yes" ] && error_exit "User abort"
 fi
 
@@ -510,10 +510,10 @@ unmount_images() {
   unmount_image "${block_device_root}" "${root_partition_dir}"
   unmount_image "${block_device_boot}" "${boot_partition_dir}"
 
-  if [ ! -z "${lede_image_decompr}"  ]; then
-    if sudo kpartx -l${kpartx_opts} "${working_sub_dir}/${lede_image_decompr}" | grep -vq "loop deleted"; then
-      print_info "Deleting device maps from ${working_sub_dir}/${lede_image_decompr}\n"
-      sudo kpartx -d${kpartx_opts} "${working_sub_dir}/${lede_image_decompr}" > "${stdout}"
+  if [ ! -z "${openwrt_image_decompr}"  ]; then
+    if sudo kpartx -l${kpartx_opts} "${working_sub_dir}/${openwrt_image_decompr}" | grep -vq "loop deleted"; then
+      print_info "Deleting device maps from ${working_sub_dir}/${openwrt_image_decompr}\n"
+      sudo kpartx -d${kpartx_opts} "${working_sub_dir}/${openwrt_image_decompr}" > "${stdout}"
     fi
   fi
 }
@@ -531,33 +531,33 @@ trap 'clean_and_exit "ERROR COMMAND: $BASH_COMMAND in line $LINENO"' $trap_signa
 
 mkdir -p "${working_sub_dir}"
 
-download "${wget_opts}" "${lede_download}" "${working_sub_dir}/${lede_html}" "LEDE html page"
+download "${wget_opts}" "${openwrt_download}" "${working_sub_dir}/${openwrt_html}" "OpenWrt html page"
 
-lede_image_compr=$(grep -o '"'${lede_image_mask}'"' "${working_sub_dir}/${lede_html}" | grep -o "${lede_image_mask}")
+openwrt_image_compr=$(grep -o '"'${openwrt_image_mask}'"' "${working_sub_dir}/${openwrt_html}" | grep -o "${openwrt_image_mask}")
 
-[ -z "${lede_image_compr}" ] && clean_and_exit "Can't get LEDE image name"
-print_var_name_value_verbose lede_image_compr
+[ -z "${openwrt_image_compr}" ] && clean_and_exit "Can't get OpenWrt image name"
+print_var_name_value_verbose openwrt_image_compr
 
-lede_release_date=$(grep -o '<td class="d">.*</td>' "${working_sub_dir}/${lede_html}" | head -n1)
-lede_release_date=$(date -d"${lede_release_date:14: -5}" +%Y-%m-%d)
-print_var_name_value_verbose lede_release_date
+openwrt_release_date=$(grep -o '<td class="d">.*</td>' "${working_sub_dir}/${openwrt_html}" | head -n1)
+openwrt_release_date=$(date -d"${openwrt_release_date:14: -5}" +%Y-%m-%d)
+print_var_name_value_verbose openwrt_release_date
 
-download "${wget_opts}" "${lede_download}/${lede_image_compr}" "${working_sub_dir}/${lede_image_compr}" "LEDE image"
+download "${wget_opts}" "${openwrt_download}/${openwrt_image_compr}" "${working_sub_dir}/${openwrt_image_compr}" "OpenWrt image"
 
-print_info "Decompressing LEDE image..."
+print_info "Decompressing OpenWrt image..."
 # debug
-[ "$debug" != "T" ] && gzip -dkf${gzip_opts} "${working_sub_dir}/${lede_image_compr}"
+[ "$debug" != "T" ] && gzip -dkf${gzip_opts} "${working_sub_dir}/${openwrt_image_compr}"
 print_info "done\n"
 
-lede_image_decompr=$(basename "${lede_image_compr}" "${lede_image_compr_ext}")
+openwrt_image_decompr=$(basename "${openwrt_image_compr}" "${openwrt_image_compr_ext}")
 
-[ -z "${lede_image_decompr}" ] && clean_and_exit "Can't unpack LEDE image"
+[ -z "${openwrt_image_decompr}" ] && clean_and_exit "Can't unpack OpenWrt image"
 
 if [ "$verbose" == "T" ]; then
-  print_var_name_value_verbose lede_image_decompr
-  parted "${working_sub_dir}/${lede_image_decompr}" print
-  print_var_name_value_verbose lede_boot_part_size
-  print_var_name_value_verbose lede_root_part_size
+  print_var_name_value_verbose openwrt_image_decompr
+  parted "${working_sub_dir}/${openwrt_image_decompr}" print
+  print_var_name_value_verbose openwrt_boot_part_size
+  print_var_name_value_verbose openwrt_root_part_size
 fi
 
 for i in $(seq 0 99); do
@@ -576,8 +576,8 @@ done
 
 [ -z "${block_device_root}" ] && error_exit "Can't evaluate block_device_root"
 
-print_info "Create device maps from ${working_sub_dir}/${lede_image_decompr}\n"
-sudo kpartx -sa${kpartx_opts} "${working_sub_dir}/${lede_image_decompr}"
+print_info "Create device maps from ${working_sub_dir}/${openwrt_image_decompr}\n"
+sudo kpartx -sa${kpartx_opts} "${working_sub_dir}/${openwrt_image_decompr}"
 sleep 1
 
 boot_uuid=$(udisksctl mount --block-device "${block_device_boot}" | grep -o "${media_user_dir}/.*")
@@ -592,19 +592,19 @@ root_uuid=$(basename "${root_uuid}" .)
 print_var_name_value_verbose root_uuid
 root_partition_dir="${media_user_dir}/${root_uuid}"
 
-lede_kernel_ver=$(grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" "${boot_partition_dir}"/${lede_kernel_image} | head -n1)
-lede_kernel_ver="${lede_kernel_ver:14}"
-[ -z "${lede_kernel_ver}" ] && lede_kernel_ver="${lede_kernel_ver_default}"
-print_var_name_value_verbose lede_kernel_ver
+openwrt_kernel_ver=$(grep -ao "Linux version [0-9]\.[0-9]\{1,2\}\.[0-9]\{1,3\}" "${boot_partition_dir}"/${openwrt_kernel_image} | head -n1)
+openwrt_kernel_ver="${openwrt_kernel_ver:14}"
+[ -z "${openwrt_kernel_ver}" ] && openwrt_kernel_ver="${openwrt_kernel_ver_default}"
+print_var_name_value_verbose openwrt_kernel_ver
 
-cat <<EOF > "${lede_init_tmp_file}"
+cat <<EOF > "${openwrt_init_tmp_file}"
 #!/bin/sh
 EOF
 
 if [ ! -z "${modules_list}" ]; then
   print_info "Meta modules to decode: '${modules_list}'\n"
   add_modules "${modules_list}"
-  print_info "Downloading modules: '${modules_to_download}' into ${modules_destination} directory on LEDE root partition\n"
+  print_info "Downloading modules: '${modules_to_download}' into ${modules_destination} directory on OpenWrt root partition\n"
 
   #[ -d "${repos_download_dir}" ] && print_info "Warning: directory ${repos_download_dir} exists. Existing repos will not be downloaded.\n" yellow
   #[ -d "${modules_download_dir}" ] && print_info "Warning: directory ${modules_download_dir} exists. Existing files will not be downloaded.\n" yellow
@@ -613,11 +613,11 @@ if [ ! -z "${modules_list}" ]; then
   #rm -f "${repos_download_dir}"/* "${modules_download_dir}"/* #2>/dev/null
 
   i=1
-#  for repo_url in $(grep -o 'http://.*' "${root_partition_dir}${lede_repo_config}"); do
-  for repo_name_url in $(cut -f2,3 -d" " --output-delimiter="@" <"${root_partition_dir}${lede_repo_config}"); do
+#  for repo_url in $(grep -o 'http://.*' "${root_partition_dir}${openwrt_repo_config}"); do
+  for repo_name_url in $(cut -f2,3 -d" " --output-delimiter="@" <"${root_partition_dir}${openwrt_repo_config}"); do
     repo_filename="${repos_download_dir}/${i}_${repo_name_url%%@*}.html"
     repo_url="${repo_name_url#*@}"
-    download "${wget_opts}" "${repo_url}" "${repo_filename}" "LEDE repository ${repo_url}"
+    download "${wget_opts}" "${repo_url}" "${repo_filename}" "OpenWrt repository ${repo_url}"
     echo -e "\n${repo_url}" >> "${repo_filename}"
     ((i++))
   done
@@ -636,12 +636,12 @@ if [ ! -z "${modules_list}" ]; then
       package_name="${package_name#*:}"
       repo_url=$(tail -n1 "${repo_filename}")
       download "${wget_opts}" "${repo_url}/${package_name}" "${modules_download_dir}/${package_name}" "module ${package_name}"
-      echo 'opkg install "'${modules_destination}'/'${package_name}'"' >> "${lede_init_tmp_file}"
+      echo 'opkg install "'${modules_destination}'/'${package_name}'"' >> "${openwrt_init_tmp_file}"
       ((modules_downloaded++)) && true
     fi
   done
-  echo '# rm '${modules_destination}'/*.ipk' >> "${lede_init_tmp_file}"
-  echo '# rmdir '${modules_destination} >> "${lede_init_tmp_file}"
+  echo '# rm '${modules_destination}'/*.ipk' >> "${openwrt_init_tmp_file}"
+  echo '# rmdir '${modules_destination} >> "${openwrt_init_tmp_file}"
 
   sudo cp -R "${modules_download_dir}/." "${root_partition_dir}/${modules_destination}"
   modules_count=$(wc -w <<<"$modules_to_download")
@@ -650,23 +650,23 @@ if [ ! -z "${modules_list}" ]; then
 fi
 
 if [ ! -z "${run_initial_script_once}" ]; then
-  print_info "Sheduling one run of initial script using LEDE ${rc_local}\n"
+  print_info "Sheduling one run of initial script using OpenWrt ${rc_local}\n"
 
-  echo 'sed -i "/#lede2rpi_delete/d" '${rc_local} >> "${lede_init_tmp_file}"
+  echo 'sed -i "/#openwrt2rpi_delete/d" '${rc_local} >> "${openwrt_init_tmp_file}"
 
-  sudo sed -i "/exit 0/i ${initial_script_path} > ${initial_script_path}.log  #lede2rpi_delete\n" "${root_partition_dir}${rc_local}"
+  sudo sed -i "/exit 0/i ${initial_script_path} > ${initial_script_path}.log  #openwrt2rpi_delete\n" "${root_partition_dir}${rc_local}"
 fi
 
 if [ ! -z "${include_initial_file}" ]; then
   print_info "Including local initial file ${include_initial_file}\n"
 
-  cat "${include_initial_file}" >> "${lede_init_tmp_file}"
+  cat "${include_initial_file}" >> "${openwrt_init_tmp_file}"
 fi
 
 if [ ! -z "$initial_script_path" ]; then
-  print_info "Creating initial script ${initial_script_path} on LEDE root partition\n"
+  print_info "Creating initial script ${initial_script_path} on OpenWrt root partition\n"
 
-  sudo cp "${lede_init_tmp_file}" "${root_partition_dir}/${initial_script_path}"
+  sudo cp "${openwrt_init_tmp_file}" "${root_partition_dir}/${initial_script_path}"
   sudo chmod u+x "${root_partition_dir}/$initial_script_path"
 fi
 
@@ -689,10 +689,10 @@ if [ -z "$dont_generate_files" ]; then
   xz -f -9 -e "${noobs_boot_image}"
   print_info "done\n"
 
-  lede_version_id=$(get_param_from_file "${root_partition_dir}/${lede_version_file}" VERSION_ID)
-  lede_build_id=$(get_param_from_file "${root_partition_dir}/${lede_version_file}" BUILD_ID)
-  lede_version="${lede_version_id} ${lede_build_id}"
-  print_var_name_value_verbose lede_version
+  openwrt_version_id=$(get_param_from_file "${root_partition_dir}/${openwrt_version_file}" VERSION_ID)
+  openwrt_build_id=$(get_param_from_file "${root_partition_dir}/${openwrt_version_file}" BUILD_ID)
+  openwrt_version="${openwrt_version_id} ${openwrt_build_id}"
+  print_var_name_value_verbose openwrt_version
 
   sudo tar -cpf "${noobs_root_image}" -C "${root_partition_dir}" . --exclude=proc/* --exclude=sys/* --exclude=dev/pts/* || clean_and_exit "tar root image failed"
   sudo chown ${USER}:${USER} "${noobs_root_image}"
@@ -735,14 +735,14 @@ EOF
     {
       "label": "${boot_part_label}",
       "filesystem_type": "FAT",
-      "partition_size_nominal": ${lede_boot_part_size},
+      "partition_size_nominal": ${openwrt_boot_part_size},
       "want_maximised": false,
       "uncompressed_tarball_size": ${boot_tar_size}
     },
     {
       "label": "${root_part_label}",
       "filesystem_type": "ext4",
-      "partition_size_nominal": ${lede_root_part_size},
+      "partition_size_nominal": ${openwrt_root_part_size},
       "want_maximised": false,
       "mkfs_options": "-O ^huge_file",
       "uncompressed_tarball_size": ${root_tar_size}
@@ -754,12 +754,12 @@ EOF
   print_info "Creating ${noobs_os_config_file}\n"
   cat <<EOF > "${destination_dir}/${noobs_os_config_file}"
 {
-  "name": "${lede_os_name}",
-  "version": "${lede_version}",
-  "release_date": "${lede_release_date}",
-  "kernel": "${lede_kernel_ver}",
+  "name": "${openwrt_os_name}",
+  "version": "${openwrt_version}",
+  "release_date": "${openwrt_release_date}",
+  "kernel": "${openwrt_kernel_ver}",
   "description": "${noobs_os_description}",
-  "url": "${lede_download}",
+  "url": "${openwrt_download}",
   "supported_hex_revisions": "${raspberry_hex_revisions}",
   "supported_models": [
         ${raspberry_models}
@@ -774,17 +774,17 @@ EOF
   print_info "Creating ${noobs_marketing_name}\n"
   tar -cpf "${destination_dir}/${noobs_marketing_name}" -C "${noobs_marketing_dir}" .
   #####################################################################
-  print_info "\nLEDE files for NOOBS are stored in ${destination_dir} directory.\nNow you can copy directory '${raspberry_model_dir}' to NOOBS/PINN SD card into /os folder\n\n"
+  print_info "\nOpenWrt files for NOOBS are stored in ${destination_dir} directory.\nNow you can copy directory '${raspberry_model_dir}' to NOOBS/PINN SD card into /os folder\n\n"
 
   if [ ! -z "$os_list_binaries_url" ]; then
-    print_info "Appending new os to ${os_list_lede_file} file\n"
+    print_info "Appending new os to ${os_list_openwrt_file} file\n"
     os_list_binaries_url_model="${os_list_binaries_url}${raspberry_model}"
 
-    cat <<EOF >> "${os_list_lede_file}"
+    cat <<EOF >> "${os_list_openwrt_file}"
         {
-            "os_name":	    "${lede_os_name}",
+            "os_name":	    "${openwrt_os_name}",
             "description":  "${noobs_os_description}",
-            "release_date": "${lede_release_date}",
+            "release_date": "${openwrt_release_date}",
             "feature_level": 0,
             "supported_hex_revisions": "${raspberry_hex_revisions}",
             "supported_models": [
@@ -803,7 +803,7 @@ EOF
         }
 EOF
     print_info "Creating ${raspberry_model_dir}.tar\n"
-    tar -cf "${working_sub_dir}/${raspberry_model_dir}_${lede_release}.tar" -C "${working_sub_dir}" "${raspberry_model_dir}"
+    tar -cf "${working_sub_dir}/${raspberry_model_dir}_${openwrt_release}.tar" -C "${working_sub_dir}" "${raspberry_model_dir}"
   fi
 fi
 
@@ -827,7 +827,7 @@ if [ ! -z "$upgrade_partitions" ]; then
   sudo sed "${upgrade_dir_root}/etc/fstab" -i -e "s|^.* / |${upgrade_rpi_dev_root}  / |"
   sudo sed "${upgrade_dir_root}/etc/fstab" -i -e "s|^.* /boot |${upgrade_rpi_dev_boot}  /boot |"
 
-  print_info "\nLEDE instalation in ${upgrade_dir_boot} and ${upgrade_dir_root} upgraded.\nBackup files you can find in directory ${upgrade_backup_dir}\n\n"
+  print_info "\nOpenWrt instalation in ${upgrade_dir_boot} and ${upgrade_dir_root} upgraded.\nBackup files you can find in directory ${upgrade_backup_dir}\n\n"
 fi
 
 trap - $trap_signals
@@ -836,12 +836,12 @@ unmount_images
 
 if [ "$delete_temp_files" == "T" ]; then
   print_info "Removing temporary files from ${working_sub_dir}\n"
-  rm "${working_sub_dir}/${lede_image_decompr}"
-  rm "${working_sub_dir}/${lede_html}"
+  rm "${working_sub_dir}/${openwrt_image_decompr}"
+  rm "${working_sub_dir}/${openwrt_html}"
   if [ ! -z "$modules_list" ]; then
     rm -f "${modules_download_dir}"/* "${repos_download_dir}"/* #2>/dev/null
     rmdir "${modules_download_dir}" "${repos_download_dir}"
   fi
-  rm "${lede_init_tmp_file}"
+  rm "${openwrt_init_tmp_file}"
 fi
 
